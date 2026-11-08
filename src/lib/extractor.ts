@@ -1,7 +1,7 @@
 // =============================================================================
 // DocuMind - Document Extraction Engine
 // Extracts text, structure, and metadata from PDF, CSV, and TXT files
-// Powered by unpdf for zero-worker, serverless-safe PDF intelligence
+// Powered by unpdf with space-preserving Unicode tokenization
 // =============================================================================
 
 export interface ExtractedDocument {
@@ -42,34 +42,53 @@ function isRawPdfSyntax(str: string): boolean {
 }
 
 /**
- * Extracts plain text from PDF Buffer using unpdf (serverless-native, zero-worker).
+ * Extracts plain text from PDF Buffer using unpdf with space-preserving reconstruction.
  */
 async function extractPdfText(
   buffer: Buffer
 ): Promise<{ text: string; pageCount: number; isScanned: boolean }> {
   try {
-    const { extractText } = await import("unpdf");
+    const { getDocumentProxy } = await import("unpdf");
     const uint8 = new Uint8Array(buffer);
-    const res = await extractText(uint8);
+    const pdf = await getDocumentProxy(uint8);
+    const pageCount = pdf.numPages || 1;
+    const pageTexts: string[] = [];
 
-    const fullText = Array.isArray(res.text)
-      ? res.text.join("\n\n")
-      : String(res.text || "");
+    for (let i = 1; i <= pageCount; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      let lastItem: any = null;
+      const lineChunks: string[] = [];
 
-    const cleaned = fullText
-      .replace(/\u0000/g, "")
-      .replace(/[ \t]+/g, " ")
-      .trim();
+      for (const item of textContent.items as any[]) {
+        if (!item || typeof item.str !== "string") continue;
+        const str = item.str;
+        if (!str) continue;
 
-    if (cleaned.length >= 20 && !isRawPdfSyntax(cleaned)) {
-      return {
-        text: cleaned,
-        pageCount: res.totalPages || 1,
-        isScanned: false,
-      };
+        if (lastItem) {
+          const prevEnded = /\s$/.test(lastItem.str);
+          const currStarts = /^\s/.test(str);
+          if (!prevEnded && !currStarts && !item.hasEOL) {
+            lineChunks.push(" ");
+          }
+        }
+        lineChunks.push(str);
+        if (item.hasEOL) lineChunks.push("\n");
+        lastItem = item;
+      }
+
+      const pageStr = lineChunks.join("").replace(/[ \t]+/g, " ").trim();
+      if (pageStr) {
+        pageTexts.push(pageStr);
+      }
+    }
+
+    const fullText = pageTexts.join("\n\n").trim();
+    if (fullText.length >= 20 && !isRawPdfSyntax(fullText)) {
+      return { text: fullText, pageCount, isScanned: false };
     }
   } catch (err) {
-    console.error("unpdf extraction failed:", err);
+    console.error("PDF text extraction error:", err);
   }
 
   // Only if truly no text layer could be recovered (scanned / image-only PDF):

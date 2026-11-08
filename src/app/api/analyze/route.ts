@@ -10,8 +10,8 @@ import { analyzeDocumentText } from "@/lib/ai/provider";
 
 export const dynamic = "force-dynamic";
 
-// Maximum upload limit: 10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// Maximum upload limit: 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: `File size exceeds the 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(1)}MB.` },
+        { error: `File size exceeds the 50MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(1)}MB.` },
         { status: 413 }
       );
     }

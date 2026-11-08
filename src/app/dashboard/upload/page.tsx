@@ -25,8 +25,8 @@ export default function UploadPage() {
   const handleFile = useCallback((f: File) => {
     setErrorMessage(null);
     if (ACCEPTED_TYPES.includes(f.type) || f.name.match(/\.(pdf|csv|txt)$/i)) {
-      if (f.size > 10 * 1024 * 1024) {
-        setErrorMessage("File exceeds 10MB maximum limit.");
+      if (f.size > 50 * 1024 * 1024) {
+        setErrorMessage("File exceeds 50MB maximum limit.");
         return;
       }
       setFile(f);
@@ -182,7 +182,7 @@ export default function UploadPage() {
             </label>
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            Supports PDF, CSV, and TXT up to 10 MB
+            Supports PDF, CSV, and TXT up to 50 MB
           </p>
         </div>
       )}
