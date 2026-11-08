@@ -3,15 +3,8 @@
 // Supports OpenAI, Google Gemini, and an intelligent heuristic fallback engine
 // =============================================================================
 
-import manipulationData from "./manipulation-techniques.json";
-
-export interface ExtractedTechnique {
-  id: number;
-  title: string;
-  principle: string;
-  example: string;
-  category: string;
-}
+import { manipulationData, type ExtractedTechnique } from "./manipulation-techniques.js";
+export type { ExtractedTechnique };
 
 export interface AnalysisOutput {
   summary: string;

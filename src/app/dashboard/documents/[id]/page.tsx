@@ -38,6 +38,8 @@ export default function DocumentDetailPage() {
     "Net retention rate stands at 112%, indicating strong expansion within existing accounts",
   ]);
 
+  const [techniques, setTechniques] = useState<any[]>([]);
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "user",
@@ -80,6 +82,7 @@ export default function DocumentDetailPage() {
             });
             if (parsed.summary) setAiSummary(parsed.summary);
             if (parsed.keyPoints?.length) setKeyPoints(parsed.keyPoints);
+            if (parsed.techniques?.length) setTechniques(parsed.techniques);
           }
         } catch {
           // fallback to defaults
@@ -225,6 +228,46 @@ export default function DocumentDetailPage() {
           {aiSummary}
         </p>
       </section>
+
+      {/* ── Extracted Techniques Directory ──────────────── */}
+      {techniques.length > 0 && (
+        <section className="rounded-2xl border border-violet-100 bg-white p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⚡</span>
+              <h2 className="text-lg font-bold text-gray-900">
+                دليل التقنيات والمبادئ الكامل المستخلص ({techniques.length} تقنية)
+              </h2>
+            </div>
+            <Link
+              href="/dashboard/upload"
+              className="text-xs font-semibold text-violet-600 hover:text-violet-800"
+            >
+              عرض الفهرس التفاعلي الكامل في لوحة التحليل ←
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+            {techniques.slice(0, 20).map((t: any) => (
+              <div
+                key={t.id}
+                className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 space-y-1 hover:border-violet-200 transition"
+              >
+                <div className="flex items-center justify-between text-xs font-bold text-violet-700">
+                  <span>تقنية #{t.id}</span>
+                  <span className="text-gray-400 font-normal text-[11px]">{t.category}</span>
+                </div>
+                <p className="text-xs font-semibold text-gray-900">{t.title}</p>
+                <p className="text-xs text-gray-600 line-clamp-2">{t.principle}</p>
+              </div>
+            ))}
+          </div>
+          {techniques.length > 20 && (
+            <p className="text-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+              يتم عرض أول 20 تقنية هنا كمعاينة سريعة. تصفح كامل الـ {techniques.length} تقنية مع الأمثلة والبحث متاح في شاشة الرفع.
+            </p>
+          )}
+        </section>
+      )}
 
       {/* ── Key Points ──────────────────────────────────── */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">

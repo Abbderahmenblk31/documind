@@ -146,6 +146,8 @@ export default function UploadPage() {
             keyPoints: data.keyPoints,
             sentiment: data.sentiment,
             topics: data.topics,
+            totalTechniquesCount: data.totalTechniquesCount,
+            techniques: data.techniques,
             metadata: data.metadata,
           })
         );
