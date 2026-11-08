@@ -97,9 +97,6 @@ export default function UploadPage() {
     }, 250);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
       // Check for user-configured API key from settings
       const savedApiKey =
         typeof window !== "undefined"
@@ -117,16 +114,60 @@ export default function UploadPage() {
       if (savedApiKey) headers["x-api-key"] = savedApiKey;
       if (savedProvider) headers["x-ai-provider"] = savedProvider;
 
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        body: formData,
-        headers,
-      });
+      let response: Response;
+
+      // If file > 3.5MB, extract text in the browser to bypass Vercel 4.5MB proxy limits
+      if (file.size > 3.5 * 1024 * 1024) {
+        setProgress(30);
+        const { extractTextInBrowser } = await import("@/lib/client-extractor");
+        const clientExt = await extractTextInBrowser(file, (p) =>
+          setProgress(30 + Math.round(p * 0.5))
+        );
+
+        headers["Content-Type"] = "application/json";
+        response = await fetch("/api/analyze", {
+          method: "POST",
+          body: JSON.stringify({
+            text: clientExt.text,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType:
+              file.type.includes("pdf") || file.name.endsWith(".pdf")
+                ? "pdf"
+                : "txt",
+            pageCount: clientExt.pageCount,
+            wordCount: clientExt.wordCount,
+          }),
+          headers,
+        });
+      } else {
+        const formData = new FormData();
+        formData.append("file", file);
+        response = await fetch("/api/analyze", {
+          method: "POST",
+          body: formData,
+          headers,
+        });
+      }
 
       clearInterval(progressTimer);
       setProgress(100);
 
-      const data = await response.json();
+      // Safe resilient response parsing (handles HTTP 413 / HTML error pages)
+      const rawText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        if (response.status === 413) {
+          throw new Error(
+            "تجاوز حجم الملف سعة النقل المباشر للمخدم (4.5MB). يرجى التأكد من استخراج النصوص أو رفع مستند أقل حجماً."
+          );
+        }
+        throw new Error(
+          `خطأ في استجابة الخادم (${response.status}): ${rawText.slice(0, 120)}`
+        );
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Analysis failed. Please try again.");
