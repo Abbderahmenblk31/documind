@@ -29,29 +29,44 @@ export function sanitizeAndDecodeArabic(str: string): string {
   // Step A: Normalize Unicode decomposition
   let text = str.normalize("NFKD");
 
-  // Step B: Fix letter-spaced Arabic words and reversed lines
+  // Step B: Fix letter-spaced Arabic words without breaking normal spaced words
   const lines = text.split(/\r?\n/);
   const fixedLines = lines.map((line) => {
     const trimmed = line.trim();
     if (!trimmed) return "";
 
     const arabicLetters = trimmed.match(/[\u0600-\u06FF]/g) || [];
-    if (arabicLetters.length < 4) return trimmed;
+    if (arabicLetters.length < 3) return trimmed;
 
-    // Detect spaced glyph pattern: single Arabic letters separated by spaces
-    // e.g. "ا ل ج م ه و ر   ت ح ل ي ل"
-    const spacedPattern = /(?:[\u0600-\u06FF]\s){3,}[\u0600-\u06FF]/;
-    if (spacedPattern.test(trimmed)) {
-      const wordClusters = trimmed.split(/ {2,}|\t+/).filter(Boolean);
-      const cleanedWords = wordClusters
-        .map((cluster) => cluster.replace(/ (?=[\u0600-\u06FF])/g, "").trim())
-        .filter(Boolean);
+    // Split line by multi-space separators (e.g. tabs or 2+ spaces)
+    const segments = trimmed.split(/(\s{2,}|\t+)/);
+    const processed = segments.map((seg) => {
+      if (/^\s+$/.test(seg)) return seg;
+      // If segment is made solely of isolated single Arabic letters:
+      const parts = seg.trim().split(/\s+/);
+      if (
+        parts.length >= 3 &&
+        parts.every((p) => p.length === 1 && /[\u0600-\u06FF]/.test(p))
+      ) {
+        return parts.join("");
+      }
+      // Or if there is an isolated sequence of 3+ single letters embedded in the segment:
+      return seg.replace(
+        /(?:(?<=^|[\s\p{P}])[\u0600-\u06FF]\s+){2,}[\u0600-\u06FF](?=$|[\s\p{P}])/gu,
+        (match) => {
+          const sub = match.trim().split(/\s+/);
+          if (
+            sub.length >= 3 &&
+            sub.every((p) => p.length === 1 && /[\u0600-\u06FF]/.test(p))
+          ) {
+            return sub.join("");
+          }
+          return match;
+        }
+      );
+    });
 
-      // Restore logical RTL reading order
-      return cleanedWords.reverse().join(" ");
-    }
-
-    return trimmed;
+    return processed.join("");
   });
 
   let result = fixedLines.join("\n");

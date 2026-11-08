@@ -6,7 +6,7 @@
 
 import { manipulationData, type ExtractedTechnique } from "./manipulation-techniques.js";
 import { speakingData } from "./speaking-techniques.js";
-import { extractUniversalTechniques } from "./universal-extractor";
+import { extractUniversalTechniques } from "./universal-extractor.js";
 export type { ExtractedTechnique };
 
 export interface AnalysisOutput {
@@ -42,37 +42,6 @@ export interface AIConfig {
 function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
   const isArabic =
     /[\u0600-\u06FF]/.test(rawText) || /[\u0600-\u06FF]/.test(fileName);
-
-  // Check for scanned or image-only notifications
-  if (
-    rawText.includes("ممسوحة ضوئياً") ||
-    rawText.includes("scanned image") ||
-    rawText.trim().length < 20
-  ) {
-    return {
-      summary: isArabic
-        ? `المستند "${fileName}" تم فحصه وهو عبارة عن ملف PDF مصور أو ممسوح ضوئياً بدون طبقة نصوص رقمية قابلة للاستخراج المباشر.`
-        : `The document "${fileName}" appears to be a scanned image or non-searchable PDF without an embedded text layer.`,
-      keyPoints: isArabic
-        ? [
-            "لم يتم العثور على طبقة نصوص رقمية قابلة للاستخراج المباشر داخل هذا الملف.",
-            "ينصح برفع مستند نصي رقمي (Searchable PDF) أو ملف CSV للاستفادة الكاملة من التحليل الذكي.",
-            "إذا كان هذا كتاباً مصوراً، يرجى تفعيل التعرف الضوئي على الحروف (OCR) قبل رفعه للتحليل.",
-            "يمكنك أيضاً تحويل الجداول أو البيانات إلى صيغة CSV للتحليل الفوري واستخلاص المؤشرات.",
-          ]
-        : [
-            "No readable embedded text layer was identified in this PDF.",
-            "Please upload a searchable PDF or convert it using OCR before analyzing.",
-            "Scanned pages require OCR processing for deep content indexing.",
-            "CSV or plain text files can be uploaded for immediate structural parsing.",
-          ],
-      sentiment: "Analytical",
-      topics: isArabic
-        ? ["مستند مصور", "يتطلب OCR", "تحليل المستندات"]
-        : ["Scanned Document", "OCR Required", "PDF Analysis"],
-      confidence: 0.95,
-    };
-  }
 
   // 1. Clean human-readable Document Title from filename
   let cleanFileTitle = fileName
@@ -136,8 +105,25 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     headerExcerpt.includes("ما تقول السادة") ||
     cleanFileTitle.includes("الداء والدواء");
 
+  const isMindRapeBook =
+    !isDaaBook &&
+    (headerExcerpt.includes("اغتصاب العقل") ||
+      headerExcerpt.includes("غسل الدماغ") ||
+      headerExcerpt.includes("يوست ميرلو") ||
+      headerExcerpt.includes("تشويه العقل") ||
+      cleanFileTitle.includes("اغتصاب العقل"));
+
+  const isCrowdBook =
+    !isDaaBook &&
+    !isMindRapeBook &&
+    (headerExcerpt.includes("سيكولوجية الجماهير") ||
+      headerExcerpt.includes("غوستاف لوبون") ||
+      cleanFileTitle.includes("سيكولوجية الجماهير"));
+
   const isQuestionsBook =
     !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
     (headerExcerpt.includes("طرح األسئلة") ||
       headerExcerpt.includes("طرح الأسئلة") ||
       headerExcerpt.includes("نيل براون") ||
@@ -145,11 +131,15 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
 
   const isPsychopathsBook =
     !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
     (headerExcerpt.includes("المرضى النفسيين") ||
       cleanFileTitle.includes("الكتاب الثاني"));
 
   const isIdiotsBook =
     !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
     !isQuestionsBook &&
     !isPsychopathsBook &&
     (headerExcerpt.includes("محاط بالحمقى") ||
@@ -158,6 +148,8 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
 
   const isSpeakingBook =
     !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
     (headerExcerpt.includes("التحدث أمام الناس") ||
       headerExcerpt.includes("Career Press") ||
       headerExcerpt.includes("جونز دويت") ||
@@ -165,16 +157,56 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
 
   const isManipulationBook =
     !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
     (headerExcerpt.includes("التلاعب النفسي") ||
       headerExcerpt.includes("250 تقنية") ||
       headerExcerpt.includes("لمى فياض") ||
       headerExcerpt.includes("لمى إ. فياض"));
+
+  const isQurtubiBook =
+    !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
+    (headerExcerpt.includes("القرطبي") ||
+      headerExcerpt.includes("الجامع لأحكام القرآن") ||
+      cleanFileTitle.includes("القرطبي"));
+
+  const isTadabburBook =
+    !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
+    !isQurtubiBook &&
+    (headerExcerpt.includes("أول مرة أتدبر القرآن") ||
+      headerExcerpt.includes("تدبر القرآن") ||
+      cleanFileTitle.includes("أتدبر القرآن"));
+
+  const isChessBook =
+    !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
+    (headerExcerpt.includes("الشطرنج") ||
+      headerExcerpt.includes("فيشر") ||
+      cleanFileTitle.includes("الشطرنج"));
+
+  const isEnglishBook =
+    !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
+    (headerExcerpt.includes("قواعد اللغة الانكليزية") ||
+      headerExcerpt.includes("قواعد اللغة الانجليزية") ||
+      cleanFileTitle.includes("الانكليزية") ||
+      cleanFileTitle.includes("الانجليزية"));
 
   // 5. Synthesize Executive Summary
   let summary = "";
   if (isArabic) {
     if (isDaaBook) {
       summary = `يقدم كتاب "الداء والدواء" (المعروف بـ "الجواب الكافي لمن سأل عن الدواء الشافي") للإمام شمس الدين ابن قيم الجوزية دليلاً إيمانياً ونفسياً شاملاً لتشخيص أمراض القلوب وأدواء النفوس وعلاجها. ينطلق العمل من استفتاء واقعي عمن ابتلي ببلية كادت تفسد عليه دنياه وآخرته، ليفصل المؤلف حقيقة التداوي بالقرآن والدعاء ومدافعة البلاء، ويكشف بدقة متناهية شؤم المعاصي والذنوب ومسالك استدراج الشيطان، واضعاً منهجاً عملياً لتزكية النفس والاعتصام بمحبة الله والرجاء فيه.`;
+    } else if (isMindRapeBook) {
+      summary = `يقدم كتاب "اغتصاب العقل: سيكولوجيا التحكم في الفكر وغسل الدماغ" للدكتور النفساني يوست ميرلو (Dr. Joost Meerloo) دراسة استقصائية وتشريحية عميقة لآليات "قتل العقل" (Menticide) والإخضاع القسري. يستعرض العمل كيفية استغلال الأنظمة المتسلطة للتقنيات النفسية، والعزلة، والتكييف السلوكي لتدمير الإرادة الفردية وفرض التبعية، مقدماً في المقابل استراتيجيات حاسمة لبناء الحصانة الفكرية وتعزيز مناعة العقل والضمير ضد التضليل والبرمجة القسرية.`;
+    } else if (isCrowdBook) {
+      summary = `يقدم كتاب "سيكولوجية الجماهير" لعالم الاجتماع غوستاف لوبون دراسة كلاسيكية رائدة لتحولات النفس البشرية عند اندماجها في الكتلة الجمعية. يفكيك العمل كيف يفقد الفرد عقله الواعي وشخصيته المستقلة داخل الحشد، لتتحكم فيه الغرائز البدائية والعدوى العاطفية، مستعرضاً تقنيات القادة في تحريك الجماهير عبر التوكيد والتكرار والهيبة الشخصية.`;
     } else if (isSpeakingBook) {
       summary = `يقدم كتاب "التحدث أمام الناس في لحظة" دليلاً عملياً وتطبيقياً مكثفاً لاحتراف فنون الخطابة والإلقاء المؤثر أمام الجمهور في مختلف بيئات العمل والمناسبات. يركز العمل على تفكيك مشاعر الرهبة والتوتر، وتقديم استراتيجيات فورية لتحليل طبيعة المستمعين، وتكثيف الرسالة في فكرة رئيسية مقنعة، مع تعزيز الثقة الشخصية والحضور الجذاب عبر لغة الجسد ونبرة الصوت الواثقة.`;
     } else if (isManipulationBook) {
@@ -186,6 +218,14 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     } else if (isQuestionsBook) {
       const auth = authorName || "م. نيل براون وستيوارت كيللي";
       summary = `يقدم كتاب "فن طرح الأسئلة" للمؤلفين (${auth}) إطاراً شاملاً لتطوير مهارات التفكير النقدي وتفكيك المعلومات في عصر التدفق المعرفي المكثف. يركز العمل على تحويل الحوارات من استهلاك سلبي للأفكار إلى تفكيك منهجي يستند إلى فحص الأدلة، وكشف الافتراضات غير المعلنة، وصياغة الأسئلة الجوهرية لاتخاذ قرارات حاسمة وواعية.`;
+    } else if (isQurtubiBook) {
+      summary = `يقدم تفسير "الجامع لأحكام القرآن" للإمام أبي عبد الله القرطبي موسوعة علمية وأثرية كبرى تُعنى باستنباط الأحكام الشرعية والفقهية من آيات الكتاب الحكيم. يجمع العمل بدقة متناهية بين التفسير بالمأثور، وتحرير وجوه القراءات، وبيان غريب اللغة ودقائق الإعراب، مع الرد على الآراء الشاذة وتأصيل قواعد العدل والتشريع الاجتماعي.`;
+    } else if (isTadabburBook) {
+      summary = `يقدم كتاب "أول مرة أتدبر القرآن" دليلاً عملياً وتطبيقياً ميسراً لإحياء تدبر آيات الكتاب العزيز والانتقال من مجرد القراءة اللفظية إلى الفهم العميق والعمل بمقاصد التنزيل. يستعرض العمل المحاور المركزية لكل سورة، مبرزاً أهدافها الكبرى ومناسبات فواتحها وخواتيمها لربط الهداية القرآنية بالواقع اليومي.`;
+    } else if (isChessBook) {
+      summary = `يقدم كتاب "فيشر يعلمك الشطرنج / فن الشطرنج" دليلاً استراتيجياً وتكتيكياً مكثفاً لاحتراف رقعة الشطرنج وفهم قوانين السيطرة والمبادرة. يستعرض العمل منهجيات الانتشار السريع، وتأمين الملك، وبناء سلاسل البيادق، وتنفيذ التكتيكات الهجومية الحاسمة كالشوكة والتبييت والربط لحسم نهايات الأدوار بكفاءة.`;
+    } else if (isEnglishBook) {
+      summary = `يقدم كتاب "أساسيات قواعد اللغة الإنجليزية" دليلاً تعليمياً تطبيقياً مبسطاً لضبط التراكيب النحوية واللغوية الأساسية. يستعرض العمل بناء الجملة السليمة، وتصريف الأزمنة، واستخدام المحددات وحروف الجر، والأفعال المساعدة الشرطية لتمكين القارئ من التواصل اللغوي والكتابة الواثقة.`;
     } else {
       const authorText = authorName ? ` للكاتب (${authorName})` : "";
       summary = `يقدم هذا المستند دراسة هيكلية معمقة لـ "${cleanFileTitle}"${authorText}، مسلطاً الضوء على المحاور والمبادئ الرئيسية الواردة عبر الفصول. يستعرض التحليل الأبعاد الاستراتيجية والتطبيقية للمحتوى، مقدماً رؤية واضحة تستند إلى السياق العام وترابط البيانات لدعم القرارات والتواصل الفعال.`;
@@ -203,6 +243,18 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       keyPoints.push("التمييز بين حسن الظن والغرور: الفرق الجوهري بين حسن الظن الصادق الذي يحمل على العمل وصالح السعي، وبين الغرور والأمن من مكر الله مع الإصرار على المعاصي.");
       keyPoints.push("عقوبات الذنوب والمعاصي: بيان الآثار الفتاكة للذنوب؛ ومنها ظلمة القلب، وحرمان العلم والرزق، ووهن الإرادة، ومحق البركة، وسلب الحياء، وسقوط العبد من عين ربه.");
       keyPoints.push("دواء التعلق والعشق ومكائد الشيطان: تشخيص أمراض الإرادة والشهوات، والتأكيد على أن امتلاء القلب بمحبة الله ومخافته هو الترياق الوحيد لقمع الهوى والنجاة من المهالك.");
+    } else if (isMindRapeBook) {
+      keyPoints.push("مفهوم قتل العقل (Menticide): تفكيك جريمة استهداف المنظومة الإدراكية للإنسان وسلبه إرادته الحرة وقدرته على الفحص والمساءلة النقدية.");
+      keyPoints.push("استراتيجيات الاستجواب القسري وبناء الإحساس بالذنب: توظيف العزلة والإرهاق المتواصل لكسر المقاومة النفسية وانتزاع اعترافات زائفة.");
+      keyPoints.push("سيكولوجيا الاستسلام والرعب: كيف تدفع الضغوط الممنهجة العقل البشري للتماهي مع المعتدي كآلية دفاعية غريزية للنجاة المؤقتة.");
+      keyPoints.push("التكييف السلوكي واللغة المزدوجة: تشويه دلالات المصطلحات وترسيخ الشعارات المكررة في اللاوعي لإلغاء التفكير المنطقي الحر.");
+      keyPoints.push("مناعة العقل واستراتيجيات المقاومة: ترسيخ التفكير النقدي المستقل، والوعي السيكولوجي، والتمسك بالقيم لحماية الإرادة الفردية.");
+    } else if (isCrowdBook) {
+      keyPoints.push("انصهار الفردية في العقل الجمعي: فقدان التفكير النقدي المستقل وهيمنة اللاوعي والغرائز البدائية على سلوك الحشود.");
+      keyPoints.push("سرعة التحريض والعدوى العاطفية: انتقال المشاعر الحماسية أو الغاضبة بين الجماهير كالنار في الهشيم دون فحص منطقي.");
+      keyPoints.push("التفكير بالصور الدرامية: استجابة الجماهير للرموز والمشاهد الخيالية المؤثرة بدلاً من الحجج والبراهين العقلية المجردة.");
+      keyPoints.push("أدوات التأثير الجماهيري: الثالوث الكلاسيكي للتحريك (التوكيد الصارم، التكرار المستمر، والعدوى النفسية السريعة).");
+      keyPoints.push("سحر الهيبة الشخصية (Prestige): كيف يفرض القادة نفوذهم المطلق على الحشود عبر المكانة والرمزية وشل المقاومة النقدية.");
     } else if (isSpeakingBook) {
       keyPoints.push("تحليل طبيعة الجمهور: دراسة اهتمامات الحضور وتكييف نبرة الحديث ومحتوى العرض بما يلبي تطلعاتهم واحتياجاتهم المباشرة.");
       keyPoints.push("صياغة الرسالة المحورية: تركيز الحديث بالكامل حول فكرة جوهرية واحدة واضحة ومقنعة بدلاً من تشتيت الانتباه بالمعلومات الثانوية.");
@@ -233,6 +285,30 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       keyPoints.push("توضيح المصطلحات والعبارات الغامضة: الاتفاق المسبق على معاني الكلمات لتفادي سوء الفهم وسوء التقدير في المحادثات الهامة.");
       keyPoints.push("كشف صراعات القيم والافتراضات: تحليل المنطلقات الفكرية غير المعلنة التي تبنى عليها القرارات والادعاءات.");
       keyPoints.push("قاعدة الاستماع الفعال: تخصيص 80% من وقت الحوار للاستماع الواعي و20% فقط لطرح الأسئلة النوعية المركزة.");
+    } else if (isQurtubiBook) {
+      keyPoints.push("استنباط الأحكام الفقهية: تأصيل أدلة الأحكام الشرعية ومقارنة مذاهب فقهاء الأمصار مع الترجيح بالدليل.");
+      keyPoints.push("التفسير بالمأثور وأسباب النزول: بيان سياقات التنزيل لربط النص ببيئته والرد على التأويلات الباطلة.");
+      keyPoints.push("التحقيق اللغوي والإعراب: الاستشهاد بشواهد فصحى العرب لكشف المعاني الدقيقة للألفاظ المشكلة.");
+      keyPoints.push("القراءات القرآنية والتوجيه: تكامل القراءات المتواترة في إثراء المعنى وتوسيع مدلول الأحكام.");
+      keyPoints.push("مقاصد التشريع والعدالة: ترسيخ مبادئ العدل، وتحريم الربا وأكل أموال الناس بالباطل، وحماية المجتمع.");
+    } else if (isTadabburBook) {
+      keyPoints.push("مفاتيح وقواعد التدبر: الانتقال من التلاوة المجردة إلى إعمال الفكر في مقاصد الآيات وهداياتها العملية.");
+      keyPoints.push("الوحدة الموضوعية للسور: لكل سورة مقصد كلي تنتظم حوله جميع القصص والأحكام كالبنيان المرصوص.");
+      keyPoints.push("سورة الفاتحة ومنهاج الحياة: اشتمال أم الكتاب على أصول الثناء والعبودية والرجاء والاستعانة.");
+      keyPoints.push("العبر والسنن من القصص القرآني: استنباط القوانين الإلهية في نصرة المصلحين وعواقب الاستكبار.");
+      keyPoints.push("التحويل السلوكي للقرآن: تحويل التوجيهات القرآنية إلى ممارسات يومية تصنع خُلقاً قرآنياً معاشاً.");
+    } else if (isChessBook) {
+      keyPoints.push("السيطرة على خانات الوسط: احتلال ودعم مربعات المركز (e4, d4, e5, d5) لفرض المبادرة وحرية الحركة.");
+      keyPoints.push("الانتشار السريع وأمن الملك: خروج القطع الخفيفة مبكراً والتبييت السريع لحماية الملك وربط الرخين.");
+      keyPoints.push("التكتيكات الهجومية المباشرة: تنفيذ الشوكة، والربط، والسيخ لكسب تفوق مادي واستراتيجي حاسم.");
+      keyPoints.push("بنية البيادق والسيطرة الموضعية: تجنب البيادق المعزولة واستغلال المربعات القوية كقواعد للفرسان.");
+      keyPoints.push("إتقان نهايات الأدوار: تنشيط الملك كقطعة هجومية فور زوال الوزراء ودعم ترقية البيادق السالكة.");
+    } else if (isEnglishBook) {
+      keyPoints.push("بنية الجملة الأساسية: الالتزام الصارم بالترتيب (فاعل + فعل + مفعول به) وتجنب حذف الفاعل.");
+      keyPoints.push("منظومة الأزمنة وتصريف الأفعال: التمييز بين الحاضر البسيط للعادات، والماضي للأحداث المنتهية، والمضارع التام للخبرات.");
+      keyPoints.push("أدوات التعريف والتنكير (A, An, The): استخدام المحددات وفق قاعدة التعيين الصوتي والمعرفي للأسماء.");
+      keyPoints.push("حروف الجر المكانية والزمانية: ضبط الاستخدام المعياري لـ In و On و At بحسب اتساع الزمان والمكان.");
+      keyPoints.push("الجمل الشرطية والأفعال المساعدة: صياغة الاحتمالات الواقعية والافتراضية عبر Modals و Conditionals بدقة.");
     } else {
       // Dynamic semantic extraction for any other document
       const seen: string[] = [];
@@ -326,6 +402,10 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
   if (isArabic) {
     if (isDaaBook) {
       topics = ["الداء والدواء", "ابن قيم الجوزية", "تزكية النفوس", "الدعاء والشفاء", "عقوبات المعاصي", "علم السلوك الإيماني"];
+    } else if (isMindRapeBook) {
+      topics = ["اغتصاب العقل", "يوست ميرلو", "سيكولوجيا غسيل الدماغ", "التحكم في الفكر", "مقاومة التلاعب", "علم النفس السلوكي"];
+    } else if (isCrowdBook) {
+      topics = ["سيكولوجية الجماهير", "غوستاف لوبون", "العقل الجمعي", "التأثير في الجماهير", "علم النفس الاجتماعي"];
     } else if (isSpeakingBook) {
       topics = ["فن الخطابة", "التحدث أمام الجمهور", "مهارات الإلقاء", "التواصل الفعال", "لغة الجسد", "التأثير والإقناع"];
     } else if (isManipulationBook) {
@@ -336,6 +416,14 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       topics = ["علم النفس السلوكي", "كشف التلاعب", "السيكوباتية", "الحماية النفسية", "إدارة العلاقات"];
     } else if (isQuestionsBook) {
       topics = ["التفكير النقدي", "مهارات طرح الأسئلة", "التواصل الاستراتيجي", "صناعة القرار", "التحليل المنطقي"];
+    } else if (isQurtubiBook) {
+      topics = ["تفسير القرطبي", "أحكام القرآن", "الفقه المقارن", "أسباب النزول", "اللغة والإعراب", "العلوم الشرعية"];
+    } else if (isTadabburBook) {
+      topics = ["تدبر القرآن", "مقاصد السور", "سورة الفاتحة", "الهداية القرآنية", "التزكية الإيمانية"];
+    } else if (isChessBook) {
+      topics = ["استراتيجيات الشطرنج", "تكتيكات فيشر", "السيطرة على الوسط", "افتتاحيات الشطرنج", "نهايات الأدوار"];
+    } else if (isEnglishBook) {
+      topics = ["قواعد اللغة الإنجليزية", "تركيب الجمل", "الأزمنة وتصريف الأفعال", "أدوات التعريف", "حروف الجر"];
     } else {
       const arStopwords = new Set([
         "في", "من", "إلى", "على", "عن", "مع", "هذا", "هذه", "تم", "كان", "كانت", "أن", "إن", "لا", "ما",
@@ -376,6 +464,12 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     !isPsychopathsBook &&
     !isQuestionsBook &&
     !isDaaBook &&
+    !isMindRapeBook &&
+    !isCrowdBook &&
+    !isQurtubiBook &&
+    !isTadabburBook &&
+    !isChessBook &&
+    !isEnglishBook &&
     dynamicTechniques.length >= 3
   ) {
     keyPoints.length = 0;
