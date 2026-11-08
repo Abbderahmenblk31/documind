@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   FileText,
   MessageSquare,
@@ -25,14 +26,14 @@ export default function Home() {
       <nav className="fixed top-0 z-50 w-full border-b border-gray-100 bg-white/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600">
               <FileText className="h-4 w-4 text-white" />
             </div>
             <span className="text-xl font-bold text-gray-900">
               Docu<span className="text-violet-600">Mind</span>
             </span>
-          </a>
+          </Link>
 
           {/* Nav links — hidden on mobile */}
           <div className="hidden items-center gap-8 md:flex">
@@ -49,18 +50,18 @@ export default function Home() {
 
           {/* CTA */}
           <div className="flex items-center gap-3">
-            <a
-              href="#pricing"
+            <Link
+              href="/login"
               className="hidden rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:text-violet-600 sm:block"
             >
               Sign In
-            </a>
-            <a
-              href="#pricing"
+            </Link>
+            <Link
+              href="/register"
               className="rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-violet-200 transition-all hover:shadow-lg hover:shadow-violet-300 hover:brightness-110"
             >
               Get Started
-            </a>
+            </Link>
           </div>
         </div>
       </nav>
@@ -97,19 +98,19 @@ export default function Home() {
 
           {/* CTA Buttons */}
           <div className="animate-fade-in-up delay-300 mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a
-              href="#pricing"
+            <Link
+              href="/register"
               className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-violet-200 transition-all hover:shadow-xl hover:shadow-violet-300 hover:brightness-110"
             >
               Get Started Free
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </a>
-            <a
-              href="#how-it-works"
+            </Link>
+            <Link
+              href="/dashboard"
               className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-8 py-4 text-base font-semibold text-gray-700 shadow-sm transition-all hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
             >
               See Demo
-            </a>
+            </Link>
           </div>
 
           {/* Trust badges */}
@@ -316,12 +317,12 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
-              <a
-                href="#"
+              <Link
+                href="/register"
                 className="mt-8 block rounded-xl border border-gray-200 py-3 text-center font-semibold text-gray-700 transition-all hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
               >
                 Get Started Free
-              </a>
+              </Link>
             </div>
 
             {/* Pro Plan */}
@@ -353,12 +354,12 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
-              <a
-                href="#"
+              <Link
+                href="/dashboard/billing"
                 className="mt-8 block rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-3 text-center font-semibold text-white shadow-md shadow-violet-200 transition-all hover:shadow-lg hover:shadow-violet-300 hover:brightness-110"
               >
                 Upgrade to Pro
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -379,13 +380,13 @@ export default function Home() {
               Join thousands of professionals who save hours every week with
               AI-powered document analysis.
             </p>
-            <a
-              href="#pricing"
+            <Link
+              href="/register"
               className="relative mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 font-semibold text-violet-700 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
             >
               Start Analyzing for Free
               <ArrowRight className="h-4 w-4" />
-            </a>
+            </Link>
           </div>
         </div>
       </section>
