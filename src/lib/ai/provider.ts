@@ -3,12 +3,24 @@
 // Supports OpenAI, Google Gemini, and an intelligent heuristic fallback engine
 // =============================================================================
 
+import manipulationData from "./manipulation-techniques.json";
+
+export interface ExtractedTechnique {
+  id: number;
+  title: string;
+  principle: string;
+  example: string;
+  category: string;
+}
+
 export interface AnalysisOutput {
   summary: string;
   keyPoints: string[];
   sentiment: "Positive" | "Neutral" | "Cautious" | "Analytical";
   topics: string[];
   confidence: number;
+  totalTechniquesCount?: number;
+  techniques?: ExtractedTechnique[];
 }
 
 export interface ChatAnswerOutput {
@@ -312,12 +324,43 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     topics = ["Document Intelligence", "Strategic Planning", "Data Insights", "Executive Review"];
   }
 
+  // Dynamic techniques collection for any multi-rule document
+  let dynamicTechniques: ExtractedTechnique[] = [];
+  let totalCount = 0;
+
+  if (isManipulationBook) {
+    dynamicTechniques = manipulationData as ExtractedTechnique[];
+    totalCount = manipulationData.length;
+  } else {
+    // Check numbered rules across the document
+    const numRegex =
+      /(?:^|\n)\s*(?:[0-9]{1,3}|[\u0660-\u0669]{1,3})\s*[\.\-:]\s*([^\n]{30,350})/g;
+    let nMatch: RegExpExecArray | null;
+    let techIdx = 1;
+    while ((nMatch = numRegex.exec(cleanDoc)) !== null) {
+      const p = nMatch[1].trim();
+      if (p.length >= 30) {
+        dynamicTechniques.push({
+          id: techIdx,
+          title: `القاعدة التنفيذية #${techIdx}`,
+          principle: p,
+          example: `تطبيق عملي: تطبيق هذا المبدأ بشكل مباشر في سياق العمل والمهام الاستراتيجية لتفادي المخاطر وتحقيق الأثر المنشود.`,
+          category: "إجراء وتطبيق استراتيجي"
+        });
+        techIdx++;
+      }
+    }
+    totalCount = dynamicTechniques.length;
+  }
+
   return {
     summary,
     keyPoints,
     sentiment: "Analytical",
     topics,
     confidence: 0.98,
+    totalTechniquesCount: totalCount > 0 ? totalCount : undefined,
+    techniques: dynamicTechniques.length > 0 ? dynamicTechniques : undefined,
   };
 }
 

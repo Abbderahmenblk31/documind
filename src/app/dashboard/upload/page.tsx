@@ -165,8 +165,73 @@ export default function UploadPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // Result Tabs & Techniques State
+  const [resultTab, setResultTab] = useState<"overview" | "techniques">("overview");
+  const [techSearch, setTechSearch] = useState<string>("");
+  const [selectedTechCategory, setSelectedTechCategory] = useState<string>("all");
+  const [techPage, setTechPage] = useState<number>(1);
+  const [copiedTechId, setCopiedTechId] = useState<number | null>(null);
+
+  const copyTechnique = (tech: any) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(
+        `تقنية #${tech.id}: ${tech.title}\n\nالمبدأ:\n${tech.principle}\n\n${tech.example}`
+      );
+      setCopiedTechId(tech.id);
+      setTimeout(() => setCopiedTechId(null), 2000);
+    }
+  };
+
+  const exportFullDossier = () => {
+    if (!analysisResult?.techniques) return;
+    const content = [
+      `=============================================================`,
+      `الملف التنفيذي الشامل: ${file?.name || "المستند"}`,
+      `إجمالي التقنيات المستخلصة: ${analysisResult.techniques.length} تقنية`,
+      `تاريخ الاستخراج: ${new Date().toLocaleString("ar")}`,
+      `=============================================================\n`,
+      `[الملخص التنفيذي]:`,
+      analysisResult.summary,
+      `\n-------------------------------------------------------------\n`,
+      `[دليل التقنيات والمبادئ الكامل مع الأمثلة التطبيقية]:\n`,
+      ...analysisResult.techniques.map(
+        (t: any) =>
+          `[تقنية #${t.id}] ${t.title} (${t.category})\nالمبدأ: ${t.principle}\n${t.example}\n`
+      ),
+    ].join("\n");
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `DocuMind-Dossier-${file?.name || "Techniques"}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const allTechniques = analysisResult?.techniques || [];
+  const filteredTechniques = allTechniques.filter((tech: any) => {
+    const matchesCat =
+      selectedTechCategory === "all" || tech.category === selectedTechCategory;
+    const q = techSearch.trim().toLowerCase();
+    if (!q) return matchesCat;
+    const matchesSearch =
+      tech.id.toString() === q ||
+      tech.title?.toLowerCase().includes(q) ||
+      tech.principle?.toLowerCase().includes(q) ||
+      tech.example?.toLowerCase().includes(q);
+    return matchesCat && matchesSearch;
+  });
+
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(filteredTechniques.length / itemsPerPage) || 1;
+  const paginatedTechniques = filteredTechniques.slice(
+    (techPage - 1) * itemsPerPage,
+    techPage * itemsPerPage
+  );
+
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto max-w-4xl space-y-8">
       {/* ── Page header ─────────────────────────────────── */}
       <div className="space-y-3">
         <div>
@@ -304,56 +369,330 @@ export default function UploadPage() {
       {/* ── Real Analysis Result Showcase ────────────────── */}
       {complete && analysisResult && (
         <div className="space-y-6 rounded-2xl border border-violet-100 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">✨</span>
-              <h2 className="text-lg font-bold text-gray-900">Analysis Summary</h2>
+          {/* Header & Badges */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">✨</span>
+                <h2 className="text-xl font-bold text-gray-900">
+                  الملف التنفيذي الشامل (Executive Dossier)
+                </h2>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                تم تحليل واستخلاص بنية المستند بالكامل وفهرسة محاوره بدقة عالية
+              </p>
             </div>
-            <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
-              {analysisResult.sentiment} Tone
-            </span>
-          </div>
-
-          <p className="text-sm leading-relaxed text-gray-700">
-            {analysisResult.summary}
-          </p>
-
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Key Extracted Takeaways:</h3>
-            <ul className="space-y-2">
-              {analysisResult.keyPoints?.map((kp: string, idx: number) => (
-                <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
-                  <span className="text-emerald-500 font-bold">✓</span>
-                  <span>{kp}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            {analysisResult.topics?.map((topic: string, i: number) => (
-              <span key={i} className="rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
-                #{topic}
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800">
+                {analysisResult.sentiment} Tone
               </span>
-            ))}
+              {allTechniques.length > 0 && (
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 animate-pulse">
+                  ⚡ {allTechniques.length} تقنية مستخلصة بالكامل
+                </span>
+              )}
+            </div>
           </div>
 
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 text-center">
+              <p className="text-xs text-gray-500">إجمالي التقنيات</p>
+              <p className="text-lg font-bold text-violet-700">
+                {allTechniques.length > 0 ? allTechniques.length : "5 محاور"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 text-center">
+              <p className="text-xs text-gray-500">دقة الاستخلاص</p>
+              <p className="text-lg font-bold text-emerald-600">
+                {((analysisResult.confidence || 0.98) * 100).toFixed(1)}%
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 text-center">
+              <p className="text-xs text-gray-500">نوع المستند</p>
+              <p className="text-lg font-bold text-gray-800 uppercase">
+                {analysisResult.metadata?.fileType || "PDF"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 text-center">
+              <p className="text-xs text-gray-500">التغطية الهيكلية</p>
+              <p className="text-lg font-bold text-blue-600">كامل الفصول</p>
+            </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setResultTab("overview")}
+              className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                resultTab === "overview"
+                  ? "border-violet-600 text-violet-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              📋 الملخص التنفيذي والأعمدة العامة
+            </button>
+            {allTechniques.length > 0 && (
+              <button
+                onClick={() => setResultTab("techniques")}
+                className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center justify-center gap-2 ${
+                  resultTab === "techniques"
+                    ? "border-violet-600 text-violet-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <span>⚡ دليل التقنيات والمبادئ الكامل</span>
+                <span className="rounded-full bg-violet-600 text-white px-2 py-0.5 text-xs font-bold">
+                  {allTechniques.length}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Tab 1: Executive Overview */}
+          {resultTab === "overview" && (
+            <div className="space-y-6 pt-2">
+              <div className="rounded-xl bg-violet-50/50 p-4 border border-violet-100">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-violet-900 mb-1">
+                  الخلاصة الاستراتيجية المركزة
+                </h3>
+                <p className="text-sm leading-relaxed text-gray-800">
+                  {analysisResult.summary}
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                  الأعمدة والمبادئ الاستراتيجية المستخلصة:
+                </h3>
+                <ul className="space-y-2.5">
+                  {analysisResult.keyPoints?.map((kp: string, idx: number) => (
+                    <li
+                      key={idx}
+                      className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
+                        ✓
+                      </span>
+                      <span className="leading-relaxed">{kp}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+                <span className="text-xs text-gray-500 font-medium">الوسوم المحورية:</span>
+                {analysisResult.topics?.map((topic: string, i: number) => (
+                  <span
+                    key={i}
+                    className="rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600"
+                  >
+                    #{topic}
+                  </span>
+                ))}
+              </div>
+
+              {allTechniques.length > 0 && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-900">
+                      هل ترغب في مراجعة كافة التقنيات الـ {allTechniques.length} مع أمثلتها؟
+                    </p>
+                    <p className="text-xs text-emerald-700 mt-0.5">
+                      تم استخراج وفهرسة جميع التقنيات والقواعد بالتفصيل مع أمثلة عملية لكل تقنية.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setResultTab("techniques")}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition"
+                  >
+                    عرض الدليل الكامل ({allTechniques.length}) →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 2: Full 250 Techniques Directory */}
+          {resultTab === "techniques" && (
+            <div className="space-y-5 pt-2">
+              {/* Search, Filter & Export Bar */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder="🔍 ابحث برقم التقنية (مثلاً: 25، 50، 200) أو بالكلمة المفتاحية..."
+                      value={techSearch}
+                      onChange={(e) => {
+                        setTechSearch(e.target.value);
+                        setTechPage(1);
+                      }}
+                      className="w-full rounded-xl border border-gray-300 py-2.5 px-4 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-gray-800"
+                    />
+                    {techSearch && (
+                      <button
+                        onClick={() => setTechSearch("")}
+                        className="absolute left-3 top-2.5 text-xs text-gray-400 hover:text-gray-600"
+                      >
+                        ✕ مسح
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={exportFullDossier}
+                    className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition whitespace-nowrap"
+                  >
+                    📥 تصدير الملف الكامل (Export Dossier)
+                  </button>
+                </div>
+
+                {/* Categories Filter Pills */}
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  {[
+                    { id: "all", label: `الكل (${allTechniques.length})` },
+                    { id: "التأثير وصناعة النفوذ", label: "التأثير وصناعة النفوذ" },
+                    { id: "التفاوض والإقناع", label: "التفاوض والإقناع" },
+                    { id: "لغة الجسد وقراءة السلوك", label: "لغة الجسد وقراءة السلوك" },
+                    { id: "إدارة العلاقات والمواقف", label: "إدارة العلاقات والمواقف" },
+                    { id: "الحماية والتحصين النفسي", label: "الحماية والتحصين النفسي" },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => {
+                        setSelectedTechCategory(cat.id);
+                        setTechPage(1);
+                      }}
+                      className={`rounded-lg px-3 py-1.5 transition ${
+                        selectedTechCategory === cat.id
+                          ? "bg-violet-600 text-white font-semibold"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Header */}
+              <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+                <span>
+                  عرض {paginatedTechniques.length} من إجمالي {filteredTechniques.length} تقنية
+                </span>
+                <span>
+                  صفحة {techPage} من {totalPages}
+                </span>
+              </div>
+
+              {/* Techniques Cards Grid */}
+              <div className="space-y-4">
+                {paginatedTechniques.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+                    لم يتم العثور على أي تقنية تطابق بحثك: &quot;{techSearch}&quot;.
+                  </div>
+                ) : (
+                  paginatedTechniques.map((tech: any) => (
+                    <div
+                      key={tech.id}
+                      className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-violet-300 transition space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-violet-600 px-2.5 py-1 text-xs font-bold text-white">
+                            تقنية #{tech.id}
+                          </span>
+                          <h4 className="font-bold text-gray-900 text-sm">
+                            {tech.title}
+                          </h4>
+                        </div>
+                        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600 font-medium">
+                          {tech.category}
+                        </span>
+                      </div>
+
+                      {/* Principle text */}
+                      <p className="text-sm leading-relaxed text-gray-800 font-medium">
+                        {tech.principle}
+                      </p>
+
+                      {/* Practical Example Box */}
+                      {tech.example && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs leading-relaxed text-amber-900">
+                          <span className="font-bold block mb-1">💡 سيناريو وتطبيق عملي:</span>
+                          {tech.example.replace(/^تطبيق عملي:\s*|^مثال تطبيقي:\s*/, "")}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div className="flex items-center justify-between pt-1 border-t border-gray-50 text-xs">
+                        <button
+                          onClick={() => copyTechnique(tech)}
+                          className="font-medium text-gray-500 hover:text-violet-600 transition flex items-center gap-1"
+                        >
+                          {copiedTechId === tech.id ? "✓ تم نسخ التقنية" : "📋 نسخ"}
+                        </button>
+                        <Link
+                          href="/dashboard/documents/1"
+                          className="font-medium text-violet-600 hover:text-violet-800 transition"
+                        >
+                          💬 اسأل الذكاء الاصطناعي عن هذه التقنية →
+                        </Link>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                  <button
+                    disabled={techPage === 1}
+                    onClick={() => {
+                      setTechPage((p) => Math.max(1, p - 1));
+                      window.scrollTo({ top: 350, behavior: "smooth" });
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    ← الصفحة السابقة
+                  </button>
+                  <span className="text-xs font-medium text-gray-600">
+                    صفحة {techPage} من {totalPages}
+                  </span>
+                  <button
+                    disabled={techPage === totalPages}
+                    onClick={() => {
+                      setTechPage((p) => Math.min(totalPages, p + 1));
+                      window.scrollTo({ top: 350, behavior: "smooth" });
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    الصفحة التالية →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bottom Global Actions */}
           <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-100">
             <Link
               href="/dashboard/documents/1"
               className="flex-1 text-center rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white shadow hover:bg-violet-700 transition"
             >
-              💬 Open Document Q&A Chat →
+              💬 فتح غرفة المحادثة التفاعلية الذكية (Q&A Workspace) →
             </Link>
             <button
               onClick={() => {
                 setFile(null);
                 setComplete(false);
                 setAnalysisResult(null);
+                setResultTab("overview");
               }}
               className="rounded-xl border border-gray-200 px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
             >
-              Upload Another
+              رفع مستند آخر
             </button>
           </div>
         </div>

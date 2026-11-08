@@ -68,6 +68,8 @@ export async function POST(request: Request) {
         sentiment: aiResult.sentiment,
         topics: aiResult.topics,
         confidence: aiResult.confidence,
+        totalTechniquesCount: aiResult.totalTechniquesCount,
+        techniques: aiResult.techniques,
         metadata: {
           ...extracted.metadata,
           sampleExcerpt: extracted.sampleExcerpt,
