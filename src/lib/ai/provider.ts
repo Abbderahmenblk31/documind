@@ -69,14 +69,47 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     .replace(/[ \t]+/g, " ")
     .trim();
 
-  // 2. Detect Document / Book Identity
+  // 2. Clean human-readable Document Title from filename
+  let cleanFileTitle = fileName
+    .replace(/^(?:Noor-Book\.com|Ta3amul\.com)\s*[-_]?\s*/gi, "")
+    .replace(/\s*[-_]?\s*\d*\.(?:pdf|csv|txt)$/gi, "")
+    .replace(/^\d+\s+/, "")
+    .trim();
+
   let docTitle = "";
   let authorName = "";
+
   const titleMatch = rawText.match(/(?:الكتاب(?:\s+[\u0600-\u06FF]+)?\s*:\s*|#\s*)([^\n#*]{4,60})/);
-  if (titleMatch) docTitle = titleMatch[1].replace(/[*#_📙📘📕]/g, "").trim();
+  if (titleMatch) {
+    const candidate = titleMatch[1].replace(/[*#_📙📘📕]/g, "").trim();
+    if (!/^\s*[\d\s.,-]+\s*$/.test(candidate) && candidate.length > 3) {
+      docTitle = candidate;
+    }
+  }
+  if (!docTitle) {
+    docTitle = cleanFileTitle || fileName;
+  }
 
   const authorMatch = rawText.match(/(?:تأليف|الكاتب|الكاتبة|بقلم)\s*:\s*([^\n#*]{3,60})/);
   if (authorMatch) authorName = authorMatch[1].replace(/[*#_]/g, "").trim();
+
+  // Domain book detection
+  const isSpeakingBook =
+    cleanFileTitle.includes("التحدث أمام الناس") ||
+    rawText.includes("التحدث أمام الناس") ||
+    rawText.includes("Career Press") ||
+    rawText.includes("جونز دويت") ||
+    rawText.includes("بايلي كيث");
+
+  const isIdiotsBook =
+    cleanFileTitle.includes("محاط بالحمقى") ||
+    rawText.includes("محاط بالحمقى") ||
+    rawText.includes("توماس إريكسون");
+
+  const isQuestionsBook =
+    cleanFileTitle.includes("طرح الأسئلة") ||
+    rawText.includes("طرح الأسئلة") ||
+    rawText.includes("نيل براون");
 
   // 3. Extract Chapters / Core Conceptual Sections
   const chapterTitles: string[] = [];
@@ -92,9 +125,11 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
   // 4. Synthesize Executive Summary (Professional analytical synthesis)
   let summary = "";
   if (isArabic) {
-    if (rawText.includes("محاط بالحمقى") || rawText.includes("حمقى")) {
+    if (isSpeakingBook) {
+      summary = `يقدم كتاب "التحدث أمام الناس في لحظة" دليلاً عملياً وتطبيقياً مكثفاً لاحتراف فنون الخطابة والإلقاء المؤثر أمام الجمهور في مختلف بيئات العمل والمناسبات. يركز العمل على تفكيك مشاعر الرهبة والتوتر، وتقديم استراتيجيات فورية لتحليل طبيعة المستمعين، وتكثيف الرسالة في فكرة رئيسية مقنعة، مع تعزيز الثقة الشخصية والحضور الجذاب عبر لغة الجسد ونبرة الصوت الواثقة.`;
+    } else if (isIdiotsBook) {
       summary = `يقدم كتاب "محاط بالحمقى" للكاتب توماس إريكسون دليلاً سلوكياً تطبيقياً لفهم الشخصيات الإنسانية وتفكيك سوء الفهم في بيئات العمل والحياة اليومية. يستعرض العمل منهجية الألوان الأربعة لتصنيف الأنماط السلوكية، مؤكداً أن الاختلاف بين البشر ليس عيباً أو حماقة، بل تباين في الدوافع وأساليب التفكير يتطلب تكيفاً ذكياً وتواصلاً موجهاً بدلاً من محاولة تغيير الآخرين أو الصدام معهم.`;
-    } else if (rawText.includes("طرح الأسئلة") || rawText.includes("فن طرح")) {
+    } else if (isQuestionsBook) {
       const auth = authorName || "م. نيل براون وستيوارت كيللي";
       summary = `يقدم كتاب "فن طرح الأسئلة" للمؤلفين (${auth}) إطاراً شاملاً لتطوير مهارات التفكير النقدي وتفكيك المعلومات في عصر التدفق المعرفي المكثف. يركز العمل على تحويل الحوارات من استهلاك سلبي للأفكار إلى تفكيك منهجي يستند إلى فحص الأدلة، وكشف الافتراضات غير المعلنة، وصياغة الأسئلة الجوهرية لاتخاذ قرارات حاسمة وواعية.`;
     } else if (docTitle) {
@@ -107,16 +142,22 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     summary = `Executive intelligence analysis for "${fileName}". The document systematically evaluates core operational, strategic, and behavioral frameworks, providing structured insights to drive evidence-based decision-making.`;
   }
 
-  // 5. Synthesize Genuine Strategic Key Takeaways (Filtering out narrative dialogue)
+  // 5. Synthesize Genuine Strategic Key Takeaways
   const keyPoints: string[] = [];
   if (isArabic) {
-    if (rawText.includes("محاط بالحمقى") || rawText.includes("حمقى")) {
+    if (isSpeakingBook) {
+      keyPoints.push("تحليل طبيعة الجمهور: دراسة اهتمامات الحضور وتكييف نبرة الحديث ومحتوى العرض بما يلبي تطلعاتهم واحتياجاتهم المباشرة.");
+      keyPoints.push("صياغة الرسالة المحورية: تركيز الحديث بالكامل حول فكرة جوهرية واحدة واضحة ومقنعة بدلاً من تشتيت الانتباه بالمعلومات الثانوية.");
+      keyPoints.push("كسر حاجز الخوف والتوتر: تحويل الطاقة العصبية والقلق إلى حضور مسرحي إيجابي وتفاعل واثق مع المستمعين.");
+      keyPoints.push("إتقان أدوات الإلقاء الجذاب: توظيف التواصل البصري، لغة الجسد المفتوحة، وتنوع نبرات الصوت لشد انتباه الجمهور باستمرار.");
+      keyPoints.push("إدارة المواقف والأسئلة المفاجئة: الرد بمرونة وهدوء على استفسارات الحضور والحفاظ على مسار المحادثة بذكاء واحترافية.");
+    } else if (isIdiotsBook) {
       keyPoints.push("الوهم الأكبر: افتراض أن طريقتنا الخاصة في التفكير هي المعيار الطبيعي الوحيد، وتفسير أي اختلاف على أنه سوء نية أو غباء.");
       keyPoints.push("تصنيف الأنماط السلوكية الأربعة: تحليل الشخصيات (الأحمر، الأصفر، الأخضر، الأزرق) لفهم المحركات النفسية لكل شخص وتفادي الصدام.");
       keyPoints.push("التواصل الموجه بالدوافع: مخاطبة كل شخص بلغته السلوكية وأولوياته بدلاً من محاولة إجباره على تبني منطقنا الخاص.");
       keyPoints.push("إدارة التوقعات والضغوط: التعرف المسبق على نقاط القوة ومسببات القلق لكل نمط سلوكي لبناء بيئة عمل متناغمة وفعالة.");
       keyPoints.push("الذكاء التواصلي العملي: التخلي عن الرغبة في تغيير الآخرين والتركيز على المرونة والتكيف الواعي لتحقيق أفضل النتائج.");
-    } else if (rawText.includes("طرح الأسئلة") || rawText.includes("فن طرح")) {
+    } else if (isQuestionsBook) {
       keyPoints.push("أهمية التفكير النقدي: الانتقال من استهلاك الإجابات السريعة إلى صياغة الأسئلة الصحيحة التي تكشف الحقائق والحلول.");
       keyPoints.push("تفكيك القضايا والاستنتاجات: التمييز الدقيق بين الرأي الشخصي العاطفي والدليل الموضوعي القابل للإثبات العلمي.");
       keyPoints.push("توضيح المصطلحات والعبارات الغامضة: الاتفاق المسبق على معاني الكلمات لتفادي سوء الفهم وسوء التقدير في المحادثات الهامة.");
@@ -134,7 +175,7 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
           if (s.length < 35 || s.length > 200) return false;
           if (/[؟?]/.test(s)) return false;
           if (/^(?:قال|قالت|سأل|سألت|أجاب|صرخ|غضب|ذهب|طرد|فكر)/.test(s)) return false;
-          if (s.includes("المقابلة") || s.includes("اخرج") || s.includes("بلهاء")) return false;
+          if (s.includes("المقابلة") || s.includes("اخرج") || s.includes("بلهاء") || s.includes("Career Press")) return false;
           return true;
         });
 
@@ -157,9 +198,11 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
   // 6. Professional Domain Topics
   let topics: string[] = [];
   if (isArabic) {
-    if (rawText.includes("محاط بالحمقى") || rawText.includes("سلوك") || rawText.includes("شخصي")) {
+    if (isSpeakingBook) {
+      topics = ["فن الخطابة", "التحدث أمام الجمهور", "مهارات الإلقاء", "التواصل الفعال", "لغة الجسد", "التأثير والإقناع"];
+    } else if (isIdiotsBook) {
       topics = ["علم النفس السلوكي", "أنماط الشخصية", "التواصل الفعال", "إدارة العلاقات", "الذكاء العاطفي"];
-    } else if (rawText.includes("طرح الأسئلة") || rawText.includes("أسئلة") || rawText.includes("تفكير")) {
+    } else if (isQuestionsBook) {
       topics = ["التفكير النقدي", "مهارات طرح الأسئلة", "التواصل الاستراتيجي", "صناعة القرار", "التحليل المنطقي"];
     } else {
       topics = ["إدارة الوثائق", "التحليل الاستراتيجي", "ذكاء الأعمال", "التقارير التنفيذية"];

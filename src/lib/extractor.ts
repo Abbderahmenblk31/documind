@@ -69,7 +69,15 @@ async function extractPdfText(
           const prevEnded = /\s$/.test(lastItem.str);
           const currStarts = /^\s/.test(str);
           if (!prevEnded && !currStarts && !item.hasEOL) {
-            lineChunks.push(" ");
+            // ONLY insert space if at least one item is a multi-character word
+            // (do NOT insert spaces between individual glyphs of the same word)
+            const isGlyphA =
+              lastItem.str.length === 1 && !/[\s.,:;!?،؟]/.test(lastItem.str);
+            const isGlyphB =
+              str.length === 1 && !/[\s.,:;!?،؟]/.test(str);
+            if (!(isGlyphA && isGlyphB)) {
+              lineChunks.push(" ");
+            }
           }
         }
         lineChunks.push(str);
@@ -77,7 +85,11 @@ async function extractPdfText(
         lastItem = item;
       }
 
-      const pageStr = lineChunks.join("").replace(/[ \t]+/g, " ").trim();
+      const pageStr = lineChunks
+        .join("")
+        .replace(/[ \t]+/g, " ")
+        .normalize("NFKD")
+        .trim();
       if (pageStr) {
         pageTexts.push(pageStr);
       }
