@@ -88,7 +88,7 @@ async function extractPdfText(
       const pageStr = lineChunks
         .join("")
         .replace(/[ \t]+/g, " ")
-        .normalize("NFKD")
+        .normalize("NFC")
         .trim();
       if (pageStr) {
         pageTexts.push(pageStr);

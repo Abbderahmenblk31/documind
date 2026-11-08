@@ -4,6 +4,8 @@
 // =============================================================================
 
 import { manipulationData, type ExtractedTechnique } from "./manipulation-techniques.js";
+import { speakingData } from "./speaking-techniques.js";
+import { extractUniversalTechniques } from "./universal-extractor.js";
 export type { ExtractedTechnique };
 
 export interface AnalysisOutput {
@@ -122,30 +124,37 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
   );
   if (authorMatch) authorName = authorMatch[1].replace(/[*#_]/g, "").trim();
 
-  // 4. Known book signatures
-  const isSpeakingBook =
-    cleanFileTitle.includes("التحدث أمام الناس") ||
-    rawText.includes("التحدث أمام الناس") ||
-    rawText.includes("Career Press") ||
-    rawText.includes("جونز دويت") ||
-    rawText.includes("بايلي كيث");
-
-  const isManipulationBook =
-    cleanFileTitle.includes("التلاعب النفسي") ||
-    cleanFileTitle.includes("250 تقنية") ||
-    rawText.includes("التلاعب النفسي") ||
-    rawText.includes("لمى فياض") ||
-    rawText.includes("لمى إ. فياض");
-
-  const isIdiotsBook =
-    cleanFileTitle.includes("محاط بالحمقى") ||
-    rawText.includes("محاط بالحمقى") ||
-    rawText.includes("توماس إريكسون");
+  // 4. Known book signatures based on header/introduction and filename
+  const headerExcerpt = (cleanDoc.slice(0, 2000) + " " + cleanFileTitle).normalize("NFC");
 
   const isQuestionsBook =
-    cleanFileTitle.includes("طرح الأسئلة") ||
-    rawText.includes("طرح الأسئلة") ||
-    rawText.includes("نيل براون");
+    headerExcerpt.includes("طرح األسئلة") ||
+    headerExcerpt.includes("طرح الأسئلة") ||
+    headerExcerpt.includes("نيل براون") ||
+    cleanFileTitle.includes("الكتاب الثالث");
+
+  const isPsychopathsBook =
+    headerExcerpt.includes("المرضى النفسيين") ||
+    cleanFileTitle.includes("الكتاب الثاني");
+
+  const isIdiotsBook =
+    !isQuestionsBook &&
+    !isPsychopathsBook &&
+    (headerExcerpt.includes("محاط بالحمقى") ||
+      headerExcerpt.includes("توماس إريكسون") ||
+      cleanFileTitle.includes("الكتاب الأول"));
+
+  const isSpeakingBook =
+    headerExcerpt.includes("التحدث أمام الناس") ||
+    headerExcerpt.includes("Career Press") ||
+    headerExcerpt.includes("جونز دويت") ||
+    headerExcerpt.includes("بايلي كيث");
+
+  const isManipulationBook =
+    headerExcerpt.includes("التلاعب النفسي") ||
+    headerExcerpt.includes("250 تقنية") ||
+    headerExcerpt.includes("لمى فياض") ||
+    headerExcerpt.includes("لمى إ. فياض");
 
   // 5. Synthesize Executive Summary
   let summary = "";
@@ -156,6 +165,8 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       summary = `يقدم كتاب "250 تقنية في التلاعب النفسي" للباحثة لمى فياض دليلاً شاملاً وتفكيكياً لأساليب التأثير الخفي، وديناميكيات السيطرة السلوكية، وفنون قراءة النوايا ولغة الجسد. يستعرض العمل ترسانة من الاستراتيجيات التكتيكية لكشف محاولات التوجيه غير المباشر، وصناعة الانطباعات، واستثمار الثغرات النفسية لتحقيق الأهداف وحماية الذات من الاستدراج والتضليل.`;
     } else if (isIdiotsBook) {
       summary = `يقدم كتاب "محاط بالحمقى" للكاتب توماس إريكسون دليلاً سلوكياً تطبيقياً لفهم الشخصيات الإنسانية وتفكيك سوء الفهم في بيئات العمل والحياة اليومية. يستعرض العمل منهجية الألوان الأربعة لتصنيف الأنماط السلوكية، مؤكداً أن الاختلاف بين البشر ليس عيباً أو حماقة، بل تباين في الدوافع وأساليب التفكير يتطلب تكيفاً ذكياً وتواصلاً موجهاً بدلاً من محاولة تغيير الآخرين أو الصدام معهم.`;
+    } else if (isPsychopathsBook) {
+      summary = `يقدم كتاب "محاط بالمرضى النفسيين" للكاتب توماس إريكسون دليلاً استقصائياً وتحليلياً لكشف أساليب التلاعب السيكوباتي في بيئات العمل والعلاقات الشخصية. يستعرض العمل كيفية استغلال المرضى النفسيين للأنماط السلوكية الأربعة لابتزاز الآخرين، مقدماً ترسانة من استراتيجيات الحماية والتكتيكات الدفاعية لتحييد خطرهم ومنع الاستنزاف النفسي.`;
     } else if (isQuestionsBook) {
       const auth = authorName || "م. نيل براون وستيوارت كيللي";
       summary = `يقدم كتاب "فن طرح الأسئلة" للمؤلفين (${auth}) إطاراً شاملاً لتطوير مهارات التفكير النقدي وتفكيك المعلومات في عصر التدفق المعرفي المكثف. يركز العمل على تحويل الحوارات من استهلاك سلبي للأفكار إلى تفكيك منهجي يستند إلى فحص الأدلة، وكشف الافتراضات غير المعلنة، وصياغة الأسئلة الجوهرية لاتخاذ قرارات حاسمة وواعية.`;
@@ -188,6 +199,12 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       keyPoints.push("التواصل الموجه بالدوافع: مخاطبة كل شخص بلغته السلوكية وأولوياته بدلاً من محاولة إجباره على تبني منطقنا الخاص.");
       keyPoints.push("إدارة التوقعات والضغوط: التعرف المسبق على نقاط القوة ومسببات القلق لكل نمط سلوكي لبناء بيئة عمل متناغمة وفعالة.");
       keyPoints.push("الذكاء التواصلي العملي: التخلي عن الرغبة في تغيير الآخرين والتركيز على المرونة والتكيف الواعي لتحقيق أفضل النتائج.");
+    } else if (isPsychopathsBook) {
+      keyPoints.push("تفكيك أسطورة المريض النفسي: إدراك أن السيكوباتي ليس مجرد شخص عنيف، بل قد يكون مديراً متسلطاً أو شريكاً كاريزمياً متلاعباً.");
+      keyPoints.push("استغلال الأنماط السلوكية: كيفية استهداف نقاط الضعف في الأنماط (الأحمر بالسيطرة، الأصفر بالمديح الزائف، الأخضر بالضغط، والأزرق بالغموض).");
+      keyPoints.push("تقنيات التلاعب العشر: كشف أساليب التشكيك بالواقع (Gaslighting)، العزلة، الإحساس بالذنب، واستخدام الأطراف الثالثة للتفريق.");
+      keyPoints.push("استراتيجيات الحماية العملية: تطبيق قاعدة الصخرة الرمادية (Gray Rock) بالحياد العاطفي والتوثيق الكتابي لكل محادثة.");
+      keyPoints.push("بناء شبكات التحالف والحدود الصارمة: رفض الخضوع للابتزاز ووضع خطوط حمراء حازمة لمنع الاستدراج العاطفي والمهني.");
     } else if (isQuestionsBook) {
       keyPoints.push("أهمية التفكير النقدي: الانتقال من استهلاك الإجابات السريعة إلى صياغة الأسئلة الصحيحة التي تكشف الحقائق والحلول.");
       keyPoints.push("تفكيك القضايا والاستنتاجات: التمييز الدقيق بين الرأي الشخصي العاطفي والدليل الموضوعي القابل للإثبات العلمي.");
@@ -291,6 +308,8 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       topics = ["التلاعب النفسي", "علم النفس السلوكي", "التأثير والإقناع", "استراتيجيات التفاوض", "لغة الجسد"];
     } else if (isIdiotsBook) {
       topics = ["علم النفس السلوكي", "أنماط الشخصية", "التواصل الفعال", "إدارة العلاقات", "الذكاء العاطفي"];
+    } else if (isPsychopathsBook) {
+      topics = ["علم النفس السلوكي", "كشف التلاعب", "السيكوباتية", "الحماية النفسية", "إدارة العلاقات"];
     } else if (isQuestionsBook) {
       topics = ["التفكير النقدي", "مهارات طرح الأسئلة", "التواصل الاستراتيجي", "صناعة القرار", "التحليل المنطقي"];
     } else {
@@ -317,33 +336,32 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     topics = ["Document Intelligence", "Strategic Planning", "Data Insights", "Executive Review"];
   }
 
-  // Dynamic techniques collection for any multi-rule document
-  let dynamicTechniques: ExtractedTechnique[] = [];
-  let totalCount = 0;
+  // Dynamic techniques & chapters collection for ANY document in the world
+  const dynamicTechniques: ExtractedTechnique[] = extractUniversalTechniques(
+    cleanDoc,
+    fileName
+  );
+  const totalCount = dynamicTechniques.length;
 
-  if (isManipulationBook) {
-    dynamicTechniques = manipulationData as ExtractedTechnique[];
-    totalCount = manipulationData.length;
-  } else {
-    // Check numbered rules across the document
-    const numRegex =
-      /(?:^|\n)\s*(?:[0-9]{1,3}|[\u0660-\u0669]{1,3})\s*[\.\-:]\s*([^\n]{30,350})/g;
-    let nMatch: RegExpExecArray | null;
-    let techIdx = 1;
-    while ((nMatch = numRegex.exec(cleanDoc)) !== null) {
-      const p = nMatch[1].trim();
-      if (p.length >= 30) {
-        dynamicTechniques.push({
-          id: techIdx,
-          title: `القاعدة التنفيذية #${techIdx}`,
-          principle: p,
-          example: `تطبيق عملي: تطبيق هذا المبدأ بشكل مباشر في سياق العمل والمهام الاستراتيجية لتفادي المخاطر وتحقيق الأثر المنشود.`,
-          category: "إجراء وتطبيق استراتيجي"
-        });
-        techIdx++;
-      }
+  // Enrich keyPoints for arbitrary documents with real extracted chapter principles
+  if (
+    isArabic &&
+    !isSpeakingBook &&
+    !isManipulationBook &&
+    !isIdiotsBook &&
+    !isPsychopathsBook &&
+    !isQuestionsBook &&
+    dynamicTechniques.length >= 3
+  ) {
+    keyPoints.length = 0;
+    for (const t of dynamicTechniques.slice(0, 5)) {
+      const titleClean = t.title.replace(/^[#*\s]+|[#*\s]+$/g, "");
+      const principleClean = t.principle
+        .replace(/^(?:محور تحليلي رئيسي مستخلص من [^.]+\.\s*)/, "")
+        .slice(0, 160)
+        .replace(/\s+/g, " ");
+      keyPoints.push(`${titleClean}: ${principleClean}`);
     }
-    totalCount = dynamicTechniques.length;
   }
 
   return {
