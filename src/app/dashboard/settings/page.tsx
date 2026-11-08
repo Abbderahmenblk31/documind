@@ -195,6 +195,8 @@ export default function SettingsPage() {
         localStorage.setItem("documind_ai_provider", provider);
         localStorage.setItem("documind_openai_key", openaiKey.trim());
         localStorage.setItem("documind_gemini_key", geminiKey.trim());
+        const activeKey = provider === "gemini" ? geminiKey.trim() : openaiKey.trim();
+        localStorage.setItem("documind_api_key", activeKey);
         localStorage.setItem("documind_openai_model", openaiModel);
         localStorage.setItem("documind_gemini_model", geminiModel);
       } catch (err) {

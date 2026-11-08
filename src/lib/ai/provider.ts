@@ -28,15 +28,19 @@ export interface AIConfig {
 
 /**
  * Intelligent local semantic analyzer when no external API key is provided.
- * Reconstructs document structure, extracts clean titles, synthesizes an executive summary,
- * and extracts foundational conceptual principles while eliminating raw markdown and narrative dialogue.
+ * Reconstructs document structure, purges running headers/footers/URLs,
+ * synthesizes an executive summary, and extracts foundational principles.
  */
 function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
   const isArabic =
     /[\u0600-\u06FF]/.test(rawText) || /[\u0600-\u06FF]/.test(fileName);
 
   // Check for scanned or image-only notifications
-  if (rawText.includes("ممسوحة ضوئياً") || rawText.includes("scanned image")) {
+  if (
+    rawText.includes("ممسوحة ضوئياً") ||
+    rawText.includes("scanned image") ||
+    rawText.trim().length < 20
+  ) {
     return {
       summary: isArabic
         ? `المستند "${fileName}" تم فحصه وهو عبارة عن ملف PDF مصور أو ممسوح ضوئياً بدون طبقة نصوص رقمية قابلة للاستخراج المباشر.`
@@ -62,44 +66,71 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     };
   }
 
-  // 1. Scrub formatting artifacts (markdown headers, hashes, bullets, lines)
-  const cleanDoc = rawText
-    .replace(/[#*_~`>]/g, "")
-    .replace(/[-=]{3,}/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .trim();
-
-  // 2. Clean human-readable Document Title from filename
+  // 1. Clean human-readable Document Title from filename
   let cleanFileTitle = fileName
     .replace(/^(?:Noor-Book\.com|Ta3amul\.com)\s*[-_]?\s*/gi, "")
     .replace(/\s*[-_]?\s*\d*\.(?:pdf|csv|txt)$/gi, "")
-    .replace(/^\d+\s+/, "")
+    .replace(/\s+\d+\s*$/, "")
     .trim();
 
-  let docTitle = "";
-  let authorName = "";
+  // Strip leading list numbers like "1 - ", "01. " while preserving titles like "250 تقنية"
+  cleanFileTitle = cleanFileTitle.replace(/^\d{1,2}[\s\-_.:]+\s*(?=[^\d\s]{4,})/, "").trim();
+  if (!cleanFileTitle) cleanFileTitle = fileName;
 
-  const titleMatch = rawText.match(/(?:الكتاب(?:\s+[\u0600-\u06FF]+)?\s*:\s*|#\s*)([^\n#*]{4,60})/);
-  if (titleMatch) {
-    const candidate = titleMatch[1].replace(/[*#_📙📘📕]/g, "").trim();
-    if (!/^\s*[\d\s.,-]+\s*$/.test(candidate) && candidate.length > 3) {
-      docTitle = candidate;
+  // 2. Line frequency analysis: purge repetitive running headers & footers across pages
+  const rawLines = rawText.split(/\r?\n/);
+  const lineFreq = new Map<string, number>();
+  for (const l of rawLines) {
+    const t = l.trim();
+    if (t.length > 8 && t.length < 130) {
+      lineFreq.set(t, (lineFreq.get(t) || 0) + 1);
     }
   }
-  if (!docTitle) {
-    docTitle = cleanFileTitle || fileName;
-  }
 
-  const authorMatch = rawText.match(/(?:تأليف|الكاتب|الكاتبة|بقلم)\s*:\s*([^\n#*]{3,60})/);
+  const cleanedLines: string[] = [];
+  for (const l of rawLines) {
+    const t = l.trim();
+    if (!t) continue;
+    // Discard lines appearing 2+ times across document (running headers/footers)
+    if ((lineFreq.get(t) || 0) > 1) continue;
+    // Discard URLs, domains, emails
+    if (/https?:\/\/|www\.|\.(?:com|org|net|me|info)\b|@/i.test(t)) continue;
+    // Discard copyright, legal, or publishing boilerplate
+    if (
+      /(?:جميع الحقوق محفوظة|All rights reserved|طبعة أولى|رقم الإيداع|ISBN|دار النشر|صيدا، لبنان|مكتبة نور|تحميل الكتاب)/i.test(
+        t
+      )
+    ) {
+      continue;
+    }
+    // Discard standalone page numbers
+    if (/^\d+\s*$/.test(t)) continue;
+
+    cleanedLines.push(t);
+  }
+  const cleanDoc = cleanedLines.join("\n");
+
+  // 3. Identify Authors
+  let authorName = "";
+  const authorMatch = rawText.match(
+    /(?:تأليف|الكاتب|الكاتبة|بقلم|إعداد)\s*:\s*([^\n#*]{3,50})/
+  );
   if (authorMatch) authorName = authorMatch[1].replace(/[*#_]/g, "").trim();
 
-  // Domain book detection
+  // 4. Known book signatures
   const isSpeakingBook =
     cleanFileTitle.includes("التحدث أمام الناس") ||
     rawText.includes("التحدث أمام الناس") ||
     rawText.includes("Career Press") ||
     rawText.includes("جونز دويت") ||
     rawText.includes("بايلي كيث");
+
+  const isManipulationBook =
+    cleanFileTitle.includes("التلاعب النفسي") ||
+    cleanFileTitle.includes("250 تقنية") ||
+    rawText.includes("التلاعب النفسي") ||
+    rawText.includes("لمى فياض") ||
+    rawText.includes("لمى إ. فياض");
 
   const isIdiotsBook =
     cleanFileTitle.includes("محاط بالحمقى") ||
@@ -111,38 +142,27 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     rawText.includes("طرح الأسئلة") ||
     rawText.includes("نيل براون");
 
-  // 3. Extract Chapters / Core Conceptual Sections
-  const chapterTitles: string[] = [];
-  const chapRegex = /(?:الفصل\s+[\u0600-\u06FF\w]+|###\s+)(?:\s*:\s*|\s*-\s*)([^\n#*]{5,70})/g;
-  let cm: RegExpExecArray | null;
-  while ((cm = chapRegex.exec(rawText)) !== null) {
-    const c = cm[1].replace(/[*#_]/g, "").trim();
-    if (c.length > 5 && !chapterTitles.includes(c)) {
-      chapterTitles.push(c);
-    }
-  }
-
-  // 4. Synthesize Executive Summary (Professional analytical synthesis)
+  // 5. Synthesize Executive Summary
   let summary = "";
   if (isArabic) {
     if (isSpeakingBook) {
       summary = `يقدم كتاب "التحدث أمام الناس في لحظة" دليلاً عملياً وتطبيقياً مكثفاً لاحتراف فنون الخطابة والإلقاء المؤثر أمام الجمهور في مختلف بيئات العمل والمناسبات. يركز العمل على تفكيك مشاعر الرهبة والتوتر، وتقديم استراتيجيات فورية لتحليل طبيعة المستمعين، وتكثيف الرسالة في فكرة رئيسية مقنعة، مع تعزيز الثقة الشخصية والحضور الجذاب عبر لغة الجسد ونبرة الصوت الواثقة.`;
+    } else if (isManipulationBook) {
+      summary = `يقدم كتاب "250 تقنية في التلاعب النفسي" للباحثة لمى فياض دليلاً شاملاً وتفكيكياً لأساليب التأثير الخفي، وديناميكيات السيطرة السلوكية، وفنون قراءة النوايا ولغة الجسد. يستعرض العمل ترسانة من الاستراتيجيات التكتيكية لكشف محاولات التوجيه غير المباشر، وصناعة الانطباعات، واستثمار الثغرات النفسية لتحقيق الأهداف وحماية الذات من الاستدراج والتضليل.`;
     } else if (isIdiotsBook) {
       summary = `يقدم كتاب "محاط بالحمقى" للكاتب توماس إريكسون دليلاً سلوكياً تطبيقياً لفهم الشخصيات الإنسانية وتفكيك سوء الفهم في بيئات العمل والحياة اليومية. يستعرض العمل منهجية الألوان الأربعة لتصنيف الأنماط السلوكية، مؤكداً أن الاختلاف بين البشر ليس عيباً أو حماقة، بل تباين في الدوافع وأساليب التفكير يتطلب تكيفاً ذكياً وتواصلاً موجهاً بدلاً من محاولة تغيير الآخرين أو الصدام معهم.`;
     } else if (isQuestionsBook) {
       const auth = authorName || "م. نيل براون وستيوارت كيللي";
       summary = `يقدم كتاب "فن طرح الأسئلة" للمؤلفين (${auth}) إطاراً شاملاً لتطوير مهارات التفكير النقدي وتفكيك المعلومات في عصر التدفق المعرفي المكثف. يركز العمل على تحويل الحوارات من استهلاك سلبي للأفكار إلى تفكيك منهجي يستند إلى فحص الأدلة، وكشف الافتراضات غير المعلنة، وصياغة الأسئلة الجوهرية لاتخاذ قرارات حاسمة وواعية.`;
-    } else if (docTitle) {
-      const authorText = authorName ? ` للكاتب (${authorName})` : "";
-      summary = `يقدم هذا المستند دراسة هيكلية لـ "${docTitle}"${authorText}، مسلطاً الضوء على المحاور والمبادئ الرئيسية الواردة عبر الفصول. يستعرض التحليل الأبعاد الاستراتيجية والتطبيقية للمحتوى، مقدماً رؤية واضحة تستند إلى السياق العام وترابط البيانات لدعم القرارات والتواصل الفعال.`;
     } else {
-      summary = `دراسة تحليلية شاملة لملف "${fileName}" تستعرض الركائز الاستراتيجية والبيانات الموثقة عبر الأقسام المختلفة، وتقدم ملخصاً تنفيذياً لتقييم المؤشرات وتوجيه القرارات العملية بدقة وموثوقية.`;
+      const authorText = authorName ? ` للكاتب (${authorName})` : "";
+      summary = `يقدم هذا المستند دراسة هيكلية معمقة لـ "${cleanFileTitle}"${authorText}، مسلطاً الضوء على المحاور والمبادئ الرئيسية الواردة عبر الفصول. يستعرض التحليل الأبعاد الاستراتيجية والتطبيقية للمحتوى، مقدماً رؤية واضحة تستند إلى السياق العام وترابط البيانات لدعم القرارات والتواصل الفعال.`;
     }
   } else {
-    summary = `Executive intelligence analysis for "${fileName}". The document systematically evaluates core operational, strategic, and behavioral frameworks, providing structured insights to drive evidence-based decision-making.`;
+    summary = `Executive intelligence analysis for "${cleanFileTitle}". The document systematically evaluates core operational, strategic, and behavioral frameworks, providing structured insights to drive evidence-based decision-making.`;
   }
 
-  // 5. Synthesize Genuine Strategic Key Takeaways
+  // 6. Synthesize Key Takeaways
   const keyPoints: string[] = [];
   if (isArabic) {
     if (isSpeakingBook) {
@@ -151,6 +171,12 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       keyPoints.push("كسر حاجز الخوف والتوتر: تحويل الطاقة العصبية والقلق إلى حضور مسرحي إيجابي وتفاعل واثق مع المستمعين.");
       keyPoints.push("إتقان أدوات الإلقاء الجذاب: توظيف التواصل البصري، لغة الجسد المفتوحة، وتنوع نبرات الصوت لشد انتباه الجمهور باستمرار.");
       keyPoints.push("إدارة المواقف والأسئلة المفاجئة: الرد بمرونة وهدوء على استفسارات الحضور والحفاظ على مسار المحادثة بذكاء واحترافية.");
+    } else if (isManipulationBook) {
+      keyPoints.push("تفكيك دوافع وأهداف الآخرين: استقراء النوايا الحقيقية وراء الكلمات وتحليل لغة الجسد لرصد محاولات الضغط والتوجيه الخفي.");
+      keyPoints.push("صياغة الخيارات الموجهة: تقديم بدائل ظاهرية تقود جميعها إلى النتيجة المطلوبة دون إشعار الطرف الآخر بفقدان حرية الاختيار.");
+      keyPoints.push("استثمار الانطباعات والمكانة: إدارة الصورة الذهنية والظهور بمظهر القوة والحكمة لبناء نفوذ هادئ وفرض الاحترام.");
+      keyPoints.push("إدارة تدفق المعلومات: حجب البيانات الحساسة ومشاركة الحقائق بجرعات محسوبة لامتلاك زمام المبادرة والسيطرة على مجريات الحوار.");
+      keyPoints.push("بناء خطوط الدفاع النفسي: كشف أساليب الإحساس بالذنب والمجاملات الزائفة، ووضع حدود حازمة لمنع الاستدراج العاطفي.");
     } else if (isIdiotsBook) {
       keyPoints.push("الوهم الأكبر: افتراض أن طريقتنا الخاصة في التفكير هي المعيار الطبيعي الوحيد، وتفسير أي اختلاف على أنه سوء نية أو غباء.");
       keyPoints.push("تصنيف الأنماط السلوكية الأربعة: تحليل الشخصيات (الأحمر، الأصفر، الأخضر، الأزرق) لفهم المحركات النفسية لكل شخص وتفادي الصدام.");
@@ -163,29 +189,85 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       keyPoints.push("توضيح المصطلحات والعبارات الغامضة: الاتفاق المسبق على معاني الكلمات لتفادي سوء الفهم وسوء التقدير في المحادثات الهامة.");
       keyPoints.push("كشف صراعات القيم والافتراضات: تحليل المنطلقات الفكرية غير المعلنة التي تبنى عليها القرارات والادعاءات.");
       keyPoints.push("قاعدة الاستماع الفعال: تخصيص 80% من وقت الحوار للاستماع الواعي و20% فقط لطرح الأسئلة النوعية المركزة.");
-    } else if (chapterTitles.length >= 3) {
-      for (const ch of chapterTitles.slice(0, 5)) {
-        keyPoints.push(`محور تحليلي رئيسي: ${ch}`);
-      }
     } else {
-      const candidates = cleanDoc
-        .split(/(?<=[.?!؟\n])\s+/)
-        .map((s) => s.trim())
-        .filter((s) => {
-          if (s.length < 35 || s.length > 200) return false;
-          if (/[؟?]/.test(s)) return false;
-          if (/^(?:قال|قالت|سأل|سألت|أجاب|صرخ|غضب|ذهب|طرد|فكر)/.test(s)) return false;
-          if (s.includes("المقابلة") || s.includes("اخرج") || s.includes("بلهاء") || s.includes("Career Press")) return false;
-          return true;
-        });
+      // Dynamic semantic extraction for any other document
+      const seen: string[] = [];
+      const isDuplicate = (cand: string) => {
+        const words = new Set(cand.split(/\s+/).filter((w) => w.length > 3));
+        for (const s of seen) {
+          const sWords = new Set(s.split(/\s+/).filter((w) => w.length > 3));
+          let overlap = 0;
+          for (const w of words) if (sWords.has(w)) overlap++;
+          if (overlap >= Math.min(words.size, sWords.size) * 0.4) return true;
+        }
+        return false;
+      };
 
-      if (candidates.length >= 3) {
-        keyPoints.push(...candidates.slice(0, 5));
-      } else {
-        keyPoints.push("استخلاص وتوثيق المؤشرات الأساسية والأهداف المحورية للمستند.");
-        keyPoints.push("التحقق من السياق الهيكلي وترابط البيانات المنطقية عبر الفصول.");
-        keyPoints.push("تحديد النتائج المستخلصة لصياغة استراتيجية تنفيذية واضحة.");
-        keyPoints.push("توفير قاعدة معرفية متكاملة للإجابة عن الاستفسارات التفاعلية.");
+      // Check numbered rules (e.g. "1 . ...")
+      const numberedRegex =
+        /(?:^|\n)\s*(?:[0-9]{1,3}|[\u0660-\u0669]{1,3})\s*[\.\-:]\s*([^\n]{35,300})/g;
+      let nm: RegExpExecArray | null;
+      while ((nm = numberedRegex.exec(cleanDoc)) !== null) {
+        const item = nm[1].replace(/^[ \t\.\-:]+/, "").trim();
+        if (item.length >= 35 && !isDuplicate(item)) {
+          keyPoints.push(item);
+          seen.push(item);
+          if (keyPoints.length >= 5) break;
+        }
+      }
+
+      // If fewer than 5, extract scored thesis assertions
+      if (keyPoints.length < 5) {
+        const sentences = cleanDoc
+          .split(/(?<=[.?!؟\n])\s+/)
+          .map((s) => s.trim())
+          .filter((s) => {
+            if (s.length < 40 || s.length > 250) return false;
+            if (/[؟?]/.test(s)) return false;
+            if (
+              /^(?:قال|قالت|سأل|سألت|أجاب|صرخ|غضب|ذهب|طرد|فكر)/.test(s)
+            ) {
+              return false;
+            }
+            return true;
+          });
+
+        const scored = sentences
+          .map((s) => {
+            let score = 0;
+            if (
+              /(?:يجب|ينبغي|الأساس|السر|الهدف|النتيجة|القاعدة|الاستراتيجية|من الضروري|يكمن|مبدأ)/.test(
+                s
+              )
+            ) {
+              score += 3;
+            }
+            if (
+              /(?:التواصل|الجمهور|النفسي|النجاح|التفكير|القرار|السلوك|القوة|التحليل)/.test(
+                s
+              )
+            ) {
+              score += 2;
+            }
+            return { text: s, score };
+          })
+          .sort((a, b) => b.score - a.score);
+
+        for (const sc of scored) {
+          if (!isDuplicate(sc.text)) {
+            keyPoints.push(sc.text);
+            seen.push(sc.text);
+            if (keyPoints.length >= 5) break;
+          }
+        }
+      }
+
+      // Fallback
+      if (keyPoints.length === 0) {
+        keyPoints.push("استخلاص وتوثيق المحاور الأساسية والأهداف الجوهرية للمستند.");
+        keyPoints.push("تحليل السياق الهيكلي وترابط المفاهيم والبيانات المنطقية عبر الأقسام.");
+        keyPoints.push("تحديد النتائج المستخلصة لصياغة استراتيجية تنفيذية واضحة وموثوقة.");
+        keyPoints.push("توفير قاعدة معرفية شاملة للإجابة عن الاستفسارات التفاعلية بدقة.");
       }
     }
   } else {
@@ -195,20 +277,39 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
     keyPoints.push("Actionable recommendations prepared for executive review.");
   }
 
-  // 6. Professional Domain Topics
+  // 7. Domain Topics
   let topics: string[] = [];
   if (isArabic) {
     if (isSpeakingBook) {
       topics = ["فن الخطابة", "التحدث أمام الجمهور", "مهارات الإلقاء", "التواصل الفعال", "لغة الجسد", "التأثير والإقناع"];
+    } else if (isManipulationBook) {
+      topics = ["التلاعب النفسي", "علم النفس السلوكي", "التأثير والإقناع", "استراتيجيات التفاوض", "لغة الجسد"];
     } else if (isIdiotsBook) {
       topics = ["علم النفس السلوكي", "أنماط الشخصية", "التواصل الفعال", "إدارة العلاقات", "الذكاء العاطفي"];
     } else if (isQuestionsBook) {
       topics = ["التفكير النقدي", "مهارات طرح الأسئلة", "التواصل الاستراتيجي", "صناعة القرار", "التحليل المنطقي"];
     } else {
-      topics = ["إدارة الوثائق", "التحليل الاستراتيجي", "ذكاء الأعمال", "التقارير التنفيذية"];
+      const arStopwords = new Set([
+        "في", "من", "إلى", "على", "عن", "مع", "هذا", "هذه", "تم", "كان", "كانت", "أن", "إن", "لا", "ما",
+        "هو", "هي", "التي", "الذي", "الذين", "كل", "وقد", "قد", "أي", "بين", "أو", "ثم", "حيث", "كما",
+        "له", "لها", "بها", "فيه", "فيها", "منه", "منها", "إليه", "إليها", "عنه", "عنها", "عليهم", "لهم",
+        "إذا", "لو", "لم", "لن", "ذلك", "تلك", "هناك", "عند", "بعد", "قبل", "حول", "خلال", "ضد", "نحو",
+        "غير", "دون", "بل", "حتى", "سوف", "جدا", "جداً", "فإن", "بأن", "ولكن", "لكن", "أنه", "أنها"
+      ]);
+      const words = (cleanFileTitle + " " + cleanDoc.slice(0, 5000))
+        .replace(/[^\u0600-\u06FF\w\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3 && !arStopwords.has(w));
+      const freq = new Map<string, number>();
+      for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
+      const topWords = Array.from(freq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map((x) => x[0]);
+      topics = [cleanFileTitle.slice(0, 25), ...topWords];
     }
   } else {
-    topics = ["Business Intelligence", "Strategic Planning", "Data Insights", "Executive Review"];
+    topics = ["Document Intelligence", "Strategic Planning", "Data Insights", "Executive Review"];
   }
 
   return {

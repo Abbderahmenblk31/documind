@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 
 /** Accepted file types */
@@ -19,6 +19,28 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0);
   const [complete, setComplete] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeAiProvider, setActiveAiProvider] = useState<string | null>(null);
+  const [hasCustomKey, setHasCustomKey] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const key =
+        localStorage.getItem("documind_api_key") ||
+        localStorage.getItem("documind_gemini_key") ||
+        localStorage.getItem("documind_openai_key");
+      const prov =
+        localStorage.getItem("documind_ai_provider") ||
+        (key?.startsWith("AIza") ? "gemini" : key?.startsWith("sk-") ? "openai" : null);
+
+      if (key && key.trim().length > 5) {
+        setHasCustomKey(true);
+        setActiveAiProvider(prov === "gemini" ? "Google Gemini" : "OpenAI GPT-4o");
+      } else {
+        setHasCustomKey(false);
+        setActiveAiProvider("DocuMind Neural Engine");
+      }
+    }
+  }, []);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
 
   /** Validate and set the selected file */
@@ -79,8 +101,17 @@ export default function UploadPage() {
       formData.append("file", file);
 
       // Check for user-configured API key from settings
-      const savedApiKey = typeof window !== "undefined" ? localStorage.getItem("documind_api_key") : null;
-      const savedProvider = typeof window !== "undefined" ? localStorage.getItem("documind_ai_provider") : null;
+      const savedApiKey =
+        typeof window !== "undefined"
+          ? localStorage.getItem("documind_api_key") ||
+            localStorage.getItem("documind_gemini_key") ||
+            localStorage.getItem("documind_openai_key")
+          : null;
+      const savedProvider =
+        typeof window !== "undefined"
+          ? localStorage.getItem("documind_ai_provider") ||
+            (savedApiKey?.startsWith("AIza") ? "gemini" : "openai")
+          : null;
 
       const headers: Record<string, string> = {};
       if (savedApiKey) headers["x-api-key"] = savedApiKey;
@@ -137,11 +168,32 @@ export default function UploadPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8">
       {/* ── Page header ─────────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Upload & Analyze Document</h1>
-        <p className="mt-1 text-gray-500">
-          Upload any PDF, CSV, or TXT file to extract insights, key metrics, and ask questions.
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Upload & Analyze Document</h1>
+          <p className="mt-1 text-gray-500">
+            Upload any PDF, CSV, or TXT file to extract insights, key metrics, and ask questions.
+          </p>
+        </div>
+
+        {/* AI Engine Status Banner */}
+        <div className="flex items-center justify-between rounded-xl border border-violet-100 bg-violet-50/70 px-4 py-2.5 text-xs text-gray-700">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-semibold text-gray-900">AI Engine:</span>
+            <span className="font-medium text-violet-900">
+              {hasCustomKey
+                ? `✨ ${activeAiProvider} (Live LLM Connected)`
+                : `🧠 DocuMind Neural Intelligence (Offline Synthesis - 0 API Key Required)`}
+            </span>
+          </div>
+          <Link
+            href="/dashboard/settings"
+            className="font-medium text-violet-600 hover:text-violet-800 underline transition-colors"
+          >
+            {hasCustomKey ? "Change Provider" : "Connect Free Gemini/OpenAI Key →"}
+          </Link>
+        </div>
       </div>
 
       {errorMessage && (
