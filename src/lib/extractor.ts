@@ -1,7 +1,7 @@
 // =============================================================================
 // DocuMind - Document Extraction Engine
 // Extracts text, structure, and metadata from PDF, CSV, and TXT files
-// Powered by unpdf with space-preserving Unicode tokenization
+// Powered by unpdf with space-preserving Unicode tokenization and RTL decoder
 // =============================================================================
 
 export interface ExtractedDocument {
@@ -18,6 +18,94 @@ export interface ExtractedDocument {
     isScannedOrImageOnly?: boolean;
   };
   sampleExcerpt: string;
+}
+
+/**
+ * Normalizes Unicode, fixes letter-spaced Arabic words, and restores reversed RTL text.
+ */
+export function sanitizeAndDecodeArabic(str: string): string {
+  if (!str) return "";
+
+  // Step A: Normalize Unicode decomposition
+  let text = str.normalize("NFKD");
+
+  // Step B: Fix letter-spaced Arabic words and reversed lines
+  const lines = text.split(/\r?\n/);
+  const fixedLines = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return "";
+
+    const arabicLetters = trimmed.match(/[\u0600-\u06FF]/g) || [];
+    if (arabicLetters.length < 4) return trimmed;
+
+    // Detect spaced glyph pattern: single Arabic letters separated by spaces
+    // e.g. "ا ل ج م ه و ر   ت ح ل ي ل"
+    const spacedPattern = /(?:[\u0600-\u06FF]\s){3,}[\u0600-\u06FF]/;
+    if (spacedPattern.test(trimmed)) {
+      const wordClusters = trimmed.split(/ {2,}|\t+/).filter(Boolean);
+      const cleanedWords = wordClusters
+        .map((cluster) => cluster.replace(/ (?=[\u0600-\u06FF])/g, "").trim())
+        .filter(Boolean);
+
+      // Restore logical RTL reading order
+      return cleanedWords.reverse().join(" ");
+    }
+
+    return trimmed;
+  });
+
+  let result = fixedLines.join("\n");
+
+  // Step C: Normalize standard Arabic letter variants in NFC
+  result = result
+    .normalize("NFC")
+    .replace(/اأ|أ/g, "أ")
+    .replace(/اإ|إ/g, "إ")
+    .replace(/اآ|آ/g, "آ")
+    .replace(/األول/g, "الأول")
+    .replace(/الاول/g, "الأول")
+    .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel for resilient matching
+    .replace(/[ \t]+/g, " ");
+
+  return result;
+}
+
+/**
+ * Discards image-only or OCR-noise pages (e.g. photos of ancient manuscripts)
+ */
+function isMeaningfulPage(pageText: string): boolean {
+  if (!pageText || pageText.trim().length < 35) return false;
+  const arabicLetters = pageText.match(/[\u0600-\u06FF]/g) || [];
+  const latinLetters = pageText.match(/[a-zA-Z]/g) || [];
+  const totalLetters = arabicLetters.length + latinLetters.length;
+  if (totalLetters / pageText.length < 0.45) return false;
+  return true;
+}
+
+/**
+ * Identifies where the core book starts, skipping lengthy editorial manuscript prefaces.
+ */
+function locateCoreTextStart(pages: string[]): number {
+  const coreMarkers = [
+    /ما\s+تقول\s+السادة\s+العلماء/i,
+    /سئل\s+الشيخ\s+الإمام/i,
+    /سئل\s+شيخ\s+الإسلام/i,
+    /فأجاب\s+الشيخ/i,
+    /قال\s+الشيخ\s+الإمام/i,
+    /الحمد\s+لله\s+رب\s+العالمين\s+وبعد/i,
+    /أما\s+بعد\s+حمد\s+الله/i,
+    /الفصل\s+الأول\s*[:\s]/i,
+    /الباب\s+الأول\s*[:\s]/i,
+  ];
+
+  for (let i = 2; i < pages.length; i++) {
+    for (const marker of coreMarkers) {
+      if (marker.test(pages[i])) {
+        return i;
+      }
+    }
+  }
+  return 0;
 }
 
 /**
@@ -52,9 +140,11 @@ async function extractPdfText(
     const uint8 = new Uint8Array(buffer);
     const pdf = await getDocumentProxy(uint8);
     const pageCount = pdf.numPages || 1;
-    const pageTexts: string[] = [];
+    const rawPages: Array<{ pageNum: number; text: string }> = [];
 
-    for (let i = 1; i <= pageCount; i++) {
+    // Scan up to 120 substantive pages
+    const maxScan = Math.min(pageCount, 120);
+    for (let i = 1; i <= maxScan; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       let lastItem: any = null;
@@ -69,8 +159,6 @@ async function extractPdfText(
           const prevEnded = /\s$/.test(lastItem.str);
           const currStarts = /^\s/.test(str);
           if (!prevEnded && !currStarts && !item.hasEOL) {
-            // ONLY insert space if at least one item is a multi-character word
-            // (do NOT insert spaces between individual glyphs of the same word)
             const isGlyphA =
               lastItem.str.length === 1 && !/[\s.,:;!?،؟]/.test(lastItem.str);
             const isGlyphB =
@@ -90,12 +178,21 @@ async function extractPdfText(
         .replace(/[ \t]+/g, " ")
         .normalize("NFC")
         .trim();
-      if (pageStr) {
-        pageTexts.push(pageStr);
+
+      if (isMeaningfulPage(pageStr)) {
+        rawPages.push({ pageNum: i, text: sanitizeAndDecodeArabic(pageStr) });
       }
     }
 
-    const fullText = pageTexts.join("\n\n").trim();
+    const justTexts = rawPages.map((p) => p.text);
+    const coreStartIdx = locateCoreTextStart(justTexts);
+
+    const substantivePages =
+      coreStartIdx > 0 && coreStartIdx < rawPages.length - 3
+        ? rawPages.slice(coreStartIdx)
+        : rawPages;
+
+    const fullText = substantivePages.map((p) => p.text).join("\n\n").trim();
     if (fullText.length >= 20 && !isRawPdfSyntax(fullText)) {
       return { text: fullText, pageCount, isScanned: false };
     }

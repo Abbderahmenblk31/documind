@@ -1,0 +1,17 @@
+import fs from 'fs';
+import { getDocumentProxy } from 'unpdf';
+
+async function checkAfter75() {
+  const filePath = 'C:/Users/abdra/OneDrive/Documents/Book/Noor-Book.com  الداء والدواء.pdf';
+  const buf = fs.readFileSync(filePath);
+  const pdf = await getDocumentProxy(new Uint8Array(buf));
+  for (let p = 76; p <= 85; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    const str = tc.items.map(x => x.str).join(' ');
+    console.log(`\n=== PAGE ${p} ===`);
+    console.log(str.slice(0, 400));
+  }
+}
+
+checkAfter75();

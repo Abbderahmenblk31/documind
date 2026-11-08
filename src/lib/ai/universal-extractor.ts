@@ -2,6 +2,7 @@
 // DocuMind - Universal Document Deconstruction Engine
 // Extracts chapters, techniques, principles, and practical scenarios
 // from ANY book or document in the world (PDF, CSV, TXT, Markdown).
+// Completely dynamic, domain-aware, and free of generic repetitive boilerplate.
 // =============================================================================
 
 import { manipulationData, type ExtractedTechnique } from "./manipulation-techniques.js";
@@ -35,14 +36,63 @@ export function normalizeArabicText(str: string): string {
 }
 
 /**
+ * Detects the intellectual/functional domain of the document.
+ */
+function detectDocumentDomain(
+  text: string,
+  fileName: string
+): "spiritual" | "psychology" | "speaking" | "questions" | "business" | "general" {
+  const combined = (fileName + " " + text.slice(0, 6000)).toLowerCase();
+  if (
+    /(?:الداء والدواء|الجواب الكافي|ابن قيم|ابن القيم|القرآن|تفسير القرطبي|صحيح البخاري|صحيح مسلم|رسول الله|أحاديث نبوية|تزكية النفوس|عقوبات المعاصي|أدواء القلوب|الدعاء المستجاب|موانع الإجابة)/i.test(
+      combined
+    )
+  ) {
+    return "spiritual";
+  }
+  if (
+    /(?:طرح األسئلة|طرح الأسئلة|التفكير النقدي|نيل براون|الكتاب الثالث|صياغة الأسئلة)/i.test(
+      combined
+    )
+  ) {
+    return "questions";
+  }
+  if (
+    /(?:التحدث أمام الناس|فن الخطابة|مهارات الإلقاء|إلقاء الكلمات|لغة الجسد أمام الجمهور)/i.test(
+      combined
+    )
+  ) {
+    return "speaking";
+  }
+  if (
+    /(?:تلاعب نفسي|250 تقنية|سيكوبات|محاط بالحمقى|محاط بالمرضى|أنماط الشخصية|توماس إريكسون|لغة الجسد|ديناميكيات السلوك)/i.test(
+      combined
+    )
+  ) {
+    return "psychology";
+  }
+  if (
+    /(?:إدارة المشاريع|خطة استراتيجية|مؤشرات الأداء|kpi|أرباح|تسويق ومبيعات|سلاسل الإمداد)/i.test(
+      combined
+    )
+  ) {
+    return "business";
+  }
+  return "general";
+}
+
+/**
  * Cleans extracted chapter headings into concise, readable titles.
  */
 function cleanChapterTitle(raw: string): string {
-  let t = raw.replace(/^[#*_\s]+|[#*_\s]+$/g, "").trim();
+  let t = raw.replace(/^[#*_\s.]+|[#*_\s.]+$/g, "").trim();
   const qMark = t.indexOf("؟");
   if (qMark > 0) return t.slice(0, qMark + 1).trim();
   const qEng = t.indexOf("?");
   if (qEng > 0) return t.slice(0, qEng + 1).trim();
+
+  // Strip page numbers or footnote brackets like )1( or [2/أ]
+  t = t.replace(/\s*[\(\[]\d+[\/\w]*[\)\]]\s*/g, " ").trim();
 
   const parts = t.split(":");
   if (parts.length >= 2) {
@@ -54,11 +104,63 @@ function cleanChapterTitle(raw: string): string {
     if (stopMatch && stopMatch[1].trim().length >= 3) {
       suffix = stopMatch[1].trim();
     } else {
-      suffix = suffix.split(/\s+/).slice(0, 6).join(" ");
+      suffix = suffix.split(/\s+/).slice(0, 8).join(" ");
     }
     return `${prefix}: ${suffix}`.trim();
   }
-  return t.split(/\s+/).slice(0, 8).join(" ").trim();
+  return t.split(/\s+/).slice(0, 9).join(" ").trim();
+}
+
+/**
+ * Extracts or synthesizes a contextually grounded practical application scenario.
+ */
+function deriveContextualExample(
+  sectionText: string,
+  title: string,
+  domain: "spiritual" | "psychology" | "speaking" | "questions" | "business" | "general"
+): string {
+  // 1. Look for explicit action sentences within the text itself
+  const actionMatch = sectionText.match(
+    /(?:(?:ينبغي|يجب|احرص|فعلى العبد|والواجب|والطريق إلى ذلك|ومن أنفع ما يكون|فتأمل|فاحذر|قاعدة عملية|تطبيق)\s+[^.!?؟\n]{25,180})/i
+  );
+  if (actionMatch) {
+    const cleanAction = actionMatch[0].replace(/\s+/g, " ").trim();
+    return `💡 هدي وتطبيق عملي: ${cleanAction}.`;
+  }
+
+  // 2. Synthesize domain-specific actionable application based on keywords
+  const cleanTitle = title.replace(/^(?:فصل|الباب|المحور|الفصل)\s*[:\s]*/i, "");
+
+  if (domain === "spiritual") {
+    if (/دعاء|سؤال|طلب/i.test(sectionText)) {
+      return `💡 تطبيق وهدي عملي: الإلحاح في الدعاء بحضور قلب كامل، والتحري في أوقات الإجابة، مع تطهير المطعم والمكسب ونبذ الاستعجال.`;
+    }
+    if (/ذنب|معصية|معاصي|عقوبة/i.test(sectionText)) {
+      return `💡 تطبيق وهدي عملي: المبادرة بمحاسبة النفس وقطع أسباب الاسترسال مع الخواطر، وملازمة الاستغفار لدفع آثار الذنب عن القلب والبدن.`;
+    }
+    if (/قلب|خواطر|محبة|عشق/i.test(sectionText)) {
+      return `💡 تطبيق وهدي عملي: صرف همة القلب إلى ما ينفعه في معاشه ومعاده، ومدافعة خطرات الهوى بالذكر والمجاهدة الصادقة.`;
+    }
+    return `💡 تطبيق وهدي عملي: استحضار هذا التوجيه (${cleanTitle.slice(0, 45)}) في تزكية النفس وإصلاح العمل واليقين بوعد الله ووعيده.`;
+  }
+
+  if (domain === "questions") {
+    return `💡 تطبيق عملي: وجه هذا السؤال الجوهري (${cleanTitle.slice(0, 45)}) في نقاشك القادم لفحص الأدلة وكشف الافتراضات غير المعلنة بدقة.`;
+  }
+
+  if (domain === "speaking") {
+    return `💡 تطبيق عملي: تدرب على مبدأ (${cleanTitle.slice(0, 45)}) قبل اللقاء عبر ضبط نبرة الصوت والتواصل البصري لترسيخ الفكرة في أذهان الحضور.`;
+  }
+
+  if (domain === "psychology") {
+    return `💡 تطبيق عملي: راقب أنماط السلوك ولغة الجسد في ضوء (${cleanTitle.slice(0, 45)})، وضع حدوداً واضحة لحماية مساحتك الشخصية وقراراتك.`;
+  }
+
+  if (domain === "business") {
+    return `💡 تطبيق عملي: حدد معياراً تشغيلياً مستنداً إلى (${cleanTitle.slice(0, 45)}) لقياس النتائج وتوجيه الموارد نحو الأهداف الأكثر تأثيراً.`;
+  }
+
+  return `💡 تطبيق عملي: توظيف التوجيه المستخلص من (${cleanTitle.slice(0, 45)}) في الممارسة الواقعية لتحسين جودة النتائج وتفادي العثرات.`;
 }
 
 /**
@@ -71,6 +173,7 @@ export function extractUniversalTechniques(
 ): ExtractedTechnique[] {
   const cleanDoc = normalizeArabicText(rawText);
   const lowerFile = (fileName || "").toLowerCase();
+  const domain = detectDocumentDomain(cleanDoc, fileName);
 
   // ── 1. Known Curated High-Precision Dossiers ─────────────────────────────
   if (
@@ -96,21 +199,27 @@ export function extractUniversalTechniques(
   }
 
   // ── 2. Universal Chapter & Section Extractor (Arabic & English) ───────────
-  // Matches: الفصل الأول, Chapter 1, Section 2, الباب الثالث, المحور الرابع, etc.
+  // Matches:
+  // - Markdown/Asterisk headings: *** ### الفصل الأول, ## الفصل الثاني
+  // - Classical Arabic: فصل:, فصل في:, فصل والدعاء, فصل ومن أنفع
+  // - Standard headings: الفصل الأول, Chapter 1, Section 2, الباب الثالث, المحور الرابع
   const headingRegex =
-    /(?:^|\n|\*\*\*|###|##|\s{2,})\s*(?:\*\*\*\s*)?(?:#{1,3}\s*)?((?:الفصل|الباب|المحور|القسم|المبحث|النمط|Chapter|Section|Part|Pillar)\s+(?:الأول|الاول|األول|الألول|أول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|الحادي عشر|الثاني عشر|الثالث عشر|الرابع عشر|الخامس عشر|السادس عشر|السابع عشر|الثامن عشر|التاسع عشر|العشرون|\d{1,3}|[\u0660-\u0669]{1,3}|[IVXLCDM]+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten)[^\n:*#]{0,60}(?::\s*[^\n*#]{1,80})?)/gi;
+    /(?:^|\n|\*\*\*|###|##|\s{2,}|[.!?؟]\s*)\s*(?:\*\*\*\s*)?(?:#{1,3}\s*)?((?:(?:الفصل|الباب|المحور|القسم|المبحث|النمط|Chapter|Section|Part|Pillar)\s+(?:الأول|الاول|األول|الألول|أول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|الحادي عشر|الثاني عشر|الثالث عشر|الرابع عشر|الخامس عشر|السادس عشر|السابع عشر|الثامن عشر|التاسع عشر|العشرون|\d{1,3}|[\u0660-\u0669]{1,3}|[IVXLCDM]+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten)[^\n:*#]{0,60}(?::\s*[^\n*#]{1,80})?)|(?:فصل\s*(?:[:\s\-]|في\b)[^.!?؟\n]{8,90}))/gi;
 
   const chapterMatches: Array<{ header: string; index: number }> = [];
   let m: RegExpExecArray | null;
 
   while ((m = headingRegex.exec(cleanDoc)) !== null) {
-    const rawHeader = m[1].replace(/^[#*\s]+|[#*\s]+$/g, "").trim();
-    // Exclude false positives (e.g. "الفصل من العمل" or "أم هناك")
+    const rawHeader = m[1].replace(/^[#*\s.]+|[#*\s.]+$/g, "").trim();
+    // Exclude false positives
     if (
       rawHeader.includes("ألي شخص") ||
       rawHeader.includes("من العمل") ||
       rawHeader.includes("أم هناك") ||
-      rawHeader.length > 100
+      rawHeader.includes("فهرس") ||
+      rawHeader.includes("طبعة") ||
+      rawHeader.includes("رقم الإيداع") ||
+      rawHeader.length > 120
     ) {
       continue;
     }
@@ -126,19 +235,11 @@ export function extractUniversalTechniques(
       const current = chapterMatches[i];
       const next = chapterMatches[i + 1];
       const sectionText = cleanDoc
-        .substring(current.index, next ? next.index : cleanDoc.length)
+        .substring(current.index, next ? next.index : current.index + 2000)
         .trim();
 
-      // Extract practical real-world example if present
-      let example = "";
-      const exMatch = sectionText.match(
-        /(?:مثال واقعي|السيناريو الشائع|تمرين عملي|كيف تحمي نفسك|كيف تطبق|مثال|Example|Scenario|Application)\s*:\s*([^\n\*\#]{20,320})/i
-      );
-      if (exMatch) {
-        example = `💡 سيناريو وتطبيق عملي: ${exMatch[0].trim()}`;
-      } else {
-        example = `💡 سيناريو وتطبيق عملي: قم بدمج مخرجات وتوجيهات هذا المحور (${current.header}) في خطة العمل والمحادثات اليومية لقياس الأثر وتحقيق أعلى كفاءة وتفادي الأخطاء المتكررة.`;
-      }
+      // Extract practical real-world example
+      const example = deriveContextualExample(sectionText, current.header, domain);
 
       // Extract core principle
       let principle = "";
@@ -163,10 +264,12 @@ export function extractUniversalTechniques(
 
       // Infer appropriate category
       let category = "فصل ومحور تطبيقي";
-      if (current.header.includes("النمط") || current.header.includes("الشخصية")) {
-        category = "علم النفس وأنماط الشخصية";
-      } else if (current.header.includes("السؤال") || current.header.includes("الأسئلة")) {
+      if (domain === "spiritual") {
+        category = "تزكية وهدي روحي وأخلاقي";
+      } else if (domain === "questions" || current.header.includes("السؤال") || current.header.includes("الأسئلة")) {
         category = "التفكير النقدي وفن طرح الأسئلة";
+      } else if (current.header.includes("النمط") || current.header.includes("الشخصية")) {
+        category = "علم النفس وأنماط الشخصية";
       } else if (current.header.includes("تلاعب") || current.header.includes("نفسي")) {
         category = "الديناميكيات السلوكية والتأثير";
       } else if (current.header.includes("تواصل") || current.header.includes("إلقاء")) {
@@ -176,7 +279,7 @@ export function extractUniversalTechniques(
       extracted.push({
         id: i + 1,
         title: current.header,
-        principle: principle.slice(0, 320),
+        principle: principle.slice(0, 320).replace(/\s+/g, " "),
         example: example.slice(0, 320),
         category,
       });
@@ -188,7 +291,6 @@ export function extractUniversalTechniques(
   }
 
   // ── 3. Universal Numbered Rules / Principles Extractor ─────────────────────
-  // Matches: 1. ... 250. or قاعدة 1, Rule 1, مبدأ 1, بند 1, قانون 1
   const numSplit = cleanDoc.split(
     /(?:^|\n)\s*(?:قاعدة|مبدأ|قانون|تكتيك|بند|Rule|Law|Principle|Tactic)?\s*(?:(\d{1,3})|([\u0660-\u0669]{1,3}))\s*[\.\-:]\s+/
   );
@@ -219,24 +321,21 @@ export function extractUniversalTechniques(
         let title = words
           .replace(/^(?:إذا|عند|في|على|من|لا|قد|تجنب|احرص|يجب|ينبغي)\s+/, "")
           .trim();
-        if (title.length < 5) title = `قاعدة وتكتيك #${num}`;
+        if (title.length < 5) title = `قاعدة وتوجيه #${num}`;
 
-        let example = "";
-        const exMatch = raw.match(
-          /(?:مثال|تطبيق|سيناريو|Example|Scenario)\s*:\s*([^\.!\n]{20,200})/i
-        );
-        if (exMatch) {
-          example = `💡 تطبيق عملي: ${exMatch[0].trim()}`;
-        } else {
-          example = `💡 تطبيق عملي: وظف هذا المبدأ التكتيكي في التفاوض وإدارة العمل لبناء الثقة المتدرجة وتجنب الصدام مع الحفاظ على وضوح أهدافك.`;
-        }
+        const example = deriveContextualExample(raw, title, domain);
 
         extracted.push({
           id: num,
           title,
           principle: raw.slice(0, 300),
           example,
-          category: "إجراء وتطبيق استراتيجي",
+          category:
+            domain === "spiritual"
+              ? "هدي وقاعدة إيمانية"
+              : domain === "psychology"
+              ? "تكتيك سلوكي"
+              : "إجراء وتطبيق استراتيجي",
         });
       }
       return extracted;
@@ -251,12 +350,16 @@ export function extractUniversalTechniques(
     for (const h of mdHeadings.slice(0, 30)) {
       const cleanH = h.replace(/^[#\s]+|[#\s]+$/g, "").trim();
       if (cleanH.length >= 4 && !cleanH.startsWith("مقدمة") && !cleanH.startsWith("فهرس")) {
+        const example = deriveContextualExample(cleanH, cleanH, domain);
         extracted.push({
           id: idx,
           title: cleanH,
-          principle: `محور تحليلي رئيسي مستخلص من "${cleanH}". يستعرض المنهجية التطبيقية والأبعاد العملية المرتبطة بهذا القسم لضمان جودة الأداء والقرارات.`,
-          example: `💡 سيناريو وتطبيق عملي: قم بدمج مخرجات (${cleanH}) في خطتك التشغيلية لقياس الأثر وتفادي الانحراف عن الأهداف المحددة.`,
-          category: "محور تنفيذي هيكلي",
+          principle: `محور تحليلي رئيسي مستخلص من "${cleanH}". يستعرض المنهجية التطبيقية والأبعاد الجوهرية المرتبطة بهذا القسم لضمان جودة الأداء والقرارات.`,
+          example,
+          category:
+            domain === "spiritual"
+              ? "تزكية وهدي روحي"
+              : "محور تنفيذي هيكلي",
         });
         idx++;
       }
@@ -266,8 +369,7 @@ export function extractUniversalTechniques(
     }
   }
 
-  // ── 5. Multi-Pillar Substantive Segmentation (Reports / Essays / Books / Whitepapers)
-  // Guarantees that EVERY arbitrary document returns a rich 10-18 pillar inventory!
+  // ── 5. Multi-Pillar Substantive Segmentation (Domain-Grounded Fallback) ───
   const isCleanChunk = (str: string): boolean => {
     if (!str || str.length < 35) return false;
     const letters = str.match(/[\u0600-\u06FFA-Za-z]/g) || [];
@@ -277,7 +379,10 @@ export function extractUniversalTechniques(
       str.includes("All rights reserved") ||
       str.includes("جميع الحقوق محفوظة") ||
       str.includes("حقوق الطبع") ||
-      str.includes("دار النشر")
+      str.includes("دار النشر") ||
+      str.includes("نسخ قديمة") ||
+      str.includes("تيسر الحصول") ||
+      str.includes("صفحة العنوان كتب")
     ) {
       return false;
     }
@@ -303,14 +408,23 @@ export function extractUniversalTechniques(
         ""
       )
       .trim();
-    if (title.length < 5) title = `المحور التنفيذي #${pId}`;
+    if (title.length < 5) title = `المحور #${pId}`;
+
+    const example = deriveContextualExample(raw, title, domain);
 
     fallbackTechniques.push({
       id: pId,
       title: `محور #${pId}: ${title}`,
       principle: raw.slice(0, 300),
-      example: `💡 تطبيق عملي: ترجم هذا المحور إلى مؤشر أداء رئيسي في خطتك التشغيلية لمتابعة النتائج وضمان توافق فريق العمل مع الرؤية المحددة.`,
-      category: "التخطيط الاستراتيجي والتحليل",
+      example,
+      category:
+        domain === "spiritual"
+          ? "تزكية وهدي روحي وأخلاقي"
+          : domain === "psychology"
+          ? "ديناميكيات سلوكية وتحليل نفسي"
+          : domain === "speaking"
+          ? "مهارات التواصل والإلقاء"
+          : "التخطيط الاستراتيجي والتحليل",
     });
     pId++;
   }
