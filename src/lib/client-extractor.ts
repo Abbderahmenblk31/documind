@@ -4,6 +4,8 @@
 // Handles reversed Arabic glyphs, skips manuscript photo pages, and pinpoints core content
 // =============================================================================
 
+import { decodeAndFixArabicText } from "./arabic-decoder";
+
 export interface ClientExtractedResult {
   text: string;
   pageCount: number;
@@ -15,64 +17,7 @@ export interface ClientExtractedResult {
  */
 export function sanitizeAndDecodeArabicClient(str: string): string {
   if (!str) return "";
-
-  // Step A: Normalize Unicode decomposition
-  let text = str.normalize("NFKD");
-
-  // Step B: Fix letter-spaced Arabic words without breaking normal spaced words
-  const lines = text.split(/\r?\n/);
-  const fixedLines = lines.map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return "";
-
-    const arabicLetters = trimmed.match(/[\u0600-\u06FF]/g) || [];
-    if (arabicLetters.length < 3) return trimmed;
-
-    // Split line by multi-space separators (e.g. tabs or 2+ spaces)
-    const segments = trimmed.split(/(\s{2,}|\t+)/);
-    const processed = segments.map((seg) => {
-      if (/^\s+$/.test(seg)) return seg;
-      // If segment is made solely of isolated single Arabic letters:
-      const parts = seg.trim().split(/\s+/);
-      if (
-        parts.length >= 3 &&
-        parts.every((p) => p.length === 1 && /[\u0600-\u06FF]/.test(p))
-      ) {
-        return parts.join("");
-      }
-      // Or if there is an isolated sequence of 3+ single letters embedded in the segment:
-      return seg.replace(
-        /(?:(?<=^|[\s\p{P}])[\u0600-\u06FF]\s+){2,}[\u0600-\u06FF](?=$|[\s\p{P}])/gu,
-        (match) => {
-          const sub = match.trim().split(/\s+/);
-          if (
-            sub.length >= 3 &&
-            sub.every((p) => p.length === 1 && /[\u0600-\u06FF]/.test(p))
-          ) {
-            return sub.join("");
-          }
-          return match;
-        }
-      );
-    });
-
-    return processed.join("");
-  });
-
-  let result = fixedLines.join("\n");
-
-  // Step C: Normalize standard Arabic letter variants in NFC
-  result = result
-    .normalize("NFC")
-    .replace(/اأ|أ/g, "أ")
-    .replace(/اإ|إ/g, "إ")
-    .replace(/اآ|آ/g, "آ")
-    .replace(/األول/g, "الأول")
-    .replace(/الاول/g, "الأول")
-    .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel for resilient matching
-    .replace(/[ \t]+/g, " ");
-
-  return result;
+  return decodeAndFixArabicText(str);
 }
 
 /**
@@ -129,7 +74,7 @@ export async function extractTextInBrowser(
   if (isCsv || file.type.startsWith("text/")) {
     const text = await file.text();
     const words = text.split(/\s+/).filter(Boolean).length;
-    return { text, pageCount: 1, wordCount: words };
+    return { text: decodeAndFixArabicText(text), pageCount: 1, wordCount: words };
   }
 
   if (isPdf) {
@@ -146,14 +91,17 @@ export async function extractTextInBrowser(
     for (let i = 1; i <= initialScanCount; i++) {
       const page = await pdf.getPage(i);
       const tc = await page.getTextContent();
-      const pageStr = tc.items
-        .map((it: any) => it.str)
-        .join(" ")
-        .replace(/[ \t]+/g, " ")
-        .trim();
+      
+      // Preserve natural word spacing: concatenate glyph items directly
+      // because pdf.js/unpdf already includes space items where spaces exist!
+      let raw = "";
+      for (const it of tc.items as any[]) {
+        raw += it.str + (it.hasEOL ? "\n" : "");
+      }
+      const pageStr = raw.normalize("NFKC").trim();
 
       if (isMeaningfulPage(pageStr)) {
-        rawPages.push({ pageNum: i, text: sanitizeAndDecodeArabicClient(pageStr) });
+        rawPages.push({ pageNum: i, text: decodeAndFixArabicText(pageStr) });
       }
 
       if (onProgress) {
@@ -196,14 +144,14 @@ export async function extractTextInBrowser(
         const pNum = additionalPagesToScan[j];
         const page = await pdf.getPage(pNum);
         const tc = await page.getTextContent();
-        const pageStr = tc.items
-          .map((it: any) => it.str)
-          .join(" ")
-          .replace(/[ \t]+/g, " ")
-          .trim();
+        let raw = "";
+        for (const it of tc.items as any[]) {
+          raw += it.str + (it.hasEOL ? "\n" : "");
+        }
+        const pageStr = raw.normalize("NFKC").trim();
 
         if (isMeaningfulPage(pageStr)) {
-          rawPages.push({ pageNum: pNum, text: sanitizeAndDecodeArabicClient(pageStr) });
+          rawPages.push({ pageNum: pNum, text: decodeAndFixArabicText(pageStr) });
         }
 
         if (onProgress) {
@@ -234,14 +182,26 @@ export async function extractTextInBrowser(
         : `The document "${file.name}" is a scanned PDF of ${pageCount} pages without an embedded text layer. Semantic document intelligence is engaged to evaluate its domain frameworks and structural milestones.`;
     }
 
+    // Safe structured composite sample to stay safely under Vercel 4.5MB payload limit
+    if (fullText.length > 400_000) {
+      const start = fullText.slice(0, 200_000);
+      const mid = fullText.slice(
+        Math.floor(fullText.length / 2) - 50_000,
+        Math.floor(fullText.length / 2) + 50_000
+      );
+      const end = fullText.slice(-100_000);
+      fullText = `${start}\n\n[...]\n\n${mid}\n\n[...]\n\n${end}`;
+    }
+
     const words = fullText.split(/\s+/).filter(Boolean).length;
     return { text: fullText, pageCount, wordCount: words };
   }
 
   const text = await file.text();
+  const cleaned = decodeAndFixArabicText(text);
   return {
-    text: text.trim().length > 0 ? text : `المستند "${file.name}" وثيقة نصية يتم تحليلها دلالياً.`,
+    text: cleaned.length > 0 ? cleaned : `المستند "${file.name}" وثيقة نصية يتم تحليلها دلالياً.`,
     pageCount: 1,
-    wordCount: text.split(/\s+/).filter(Boolean).length || 50,
+    wordCount: cleaned.split(/\s+/).filter(Boolean).length || 50,
   };
 }

@@ -4,6 +4,8 @@
 // Powered by unpdf with space-preserving Unicode tokenization and RTL decoder
 // =============================================================================
 
+import { decodeAndFixArabicText } from "./arabic-decoder";
+
 export interface ExtractedDocument {
   text: string;
   metadata: {
@@ -25,64 +27,7 @@ export interface ExtractedDocument {
  */
 export function sanitizeAndDecodeArabic(str: string): string {
   if (!str) return "";
-
-  // Step A: Normalize Unicode decomposition
-  let text = str.normalize("NFKD");
-
-  // Step B: Fix letter-spaced Arabic words without breaking normal spaced words
-  const lines = text.split(/\r?\n/);
-  const fixedLines = lines.map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return "";
-
-    const arabicLetters = trimmed.match(/[\u0600-\u06FF]/g) || [];
-    if (arabicLetters.length < 3) return trimmed;
-
-    // Split line by multi-space separators (e.g. tabs or 2+ spaces)
-    const segments = trimmed.split(/(\s{2,}|\t+)/);
-    const processed = segments.map((seg) => {
-      if (/^\s+$/.test(seg)) return seg;
-      // If segment is made solely of isolated single Arabic letters:
-      const parts = seg.trim().split(/\s+/);
-      if (
-        parts.length >= 3 &&
-        parts.every((p) => p.length === 1 && /[\u0600-\u06FF]/.test(p))
-      ) {
-        return parts.join("");
-      }
-      // Or if there is an isolated sequence of 3+ single letters embedded in the segment:
-      return seg.replace(
-        /(?:(?<=^|[\s\p{P}])[\u0600-\u06FF]\s+){2,}[\u0600-\u06FF](?=$|[\s\p{P}])/gu,
-        (match) => {
-          const sub = match.trim().split(/\s+/);
-          if (
-            sub.length >= 3 &&
-            sub.every((p) => p.length === 1 && /[\u0600-\u06FF]/.test(p))
-          ) {
-            return sub.join("");
-          }
-          return match;
-        }
-      );
-    });
-
-    return processed.join("");
-  });
-
-  let result = fixedLines.join("\n");
-
-  // Step C: Normalize standard Arabic letter variants in NFC
-  result = result
-    .normalize("NFC")
-    .replace(/اأ|أ/g, "أ")
-    .replace(/اإ|إ/g, "إ")
-    .replace(/اآ|آ/g, "آ")
-    .replace(/األول/g, "الأول")
-    .replace(/الاول/g, "الأول")
-    .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel for resilient matching
-    .replace(/[ \t]+/g, " ");
-
-  return result;
+  return decodeAndFixArabicText(str);
 }
 
 /**
@@ -162,37 +107,13 @@ async function extractPdfText(
     for (let i = 1; i <= maxScan; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      let lastItem: any = null;
-      const lineChunks: string[] = [];
-
+      let raw = "";
       for (const item of textContent.items as any[]) {
         if (!item || typeof item.str !== "string") continue;
-        const str = item.str;
-        if (!str) continue;
-
-        if (lastItem) {
-          const prevEnded = /\s$/.test(lastItem.str);
-          const currStarts = /^\s/.test(str);
-          if (!prevEnded && !currStarts && !item.hasEOL) {
-            const isGlyphA =
-              lastItem.str.length === 1 && !/[\s.,:;!?،؟]/.test(lastItem.str);
-            const isGlyphB =
-              str.length === 1 && !/[\s.,:;!?،؟]/.test(str);
-            if (!(isGlyphA && isGlyphB)) {
-              lineChunks.push(" ");
-            }
-          }
-        }
-        lineChunks.push(str);
-        if (item.hasEOL) lineChunks.push("\n");
-        lastItem = item;
+        raw += item.str + (item.hasEOL ? "\n" : "");
       }
 
-      const pageStr = lineChunks
-        .join("")
-        .replace(/[ \t]+/g, " ")
-        .normalize("NFC")
-        .trim();
+      const pageStr = raw.normalize("NFKC").trim();
 
       if (isMeaningfulPage(pageStr)) {
         rawPages.push({ pageNum: i, text: sanitizeAndDecodeArabic(pageStr) });
