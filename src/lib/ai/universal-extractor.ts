@@ -266,30 +266,42 @@ export function extractUniversalTechniques(
     }
   }
 
-  // ── 5. Multi-Pillar Substantive Segmentation (Reports / Essays / Whitepapers)
-  // Guarantees that EVERY arbitrary document returns a rich 12-16 pillar inventory!
-  const paragraphs = cleanDoc
-    .split(/\n\s*\n/)
-    .map((p) => p.trim().replace(/\s+/g, " "))
-    .filter(
-      (p) =>
-        p.length >= 60 &&
-        p.length <= 400 &&
-        !/^\d+$/.test(p) &&
-        !p.includes("All rights reserved") &&
-        !p.includes("جميع الحقوق محفوظة")
-    );
+  // ── 5. Multi-Pillar Substantive Segmentation (Reports / Essays / Books / Whitepapers)
+  // Guarantees that EVERY arbitrary document returns a rich 10-18 pillar inventory!
+  const isCleanChunk = (str: string): boolean => {
+    if (!str || str.length < 35) return false;
+    const letters = str.match(/[\u0600-\u06FFA-Za-z]/g) || [];
+    if (letters.length / str.length < 0.65) return false;
+    if (/[A-Za-z\u0621-\u064A][!؟?@#$][A-Za-z\u0621-\u064A]/.test(str)) return false;
+    if (
+      str.includes("All rights reserved") ||
+      str.includes("جميع الحقوق محفوظة") ||
+      str.includes("حقوق الطبع") ||
+      str.includes("دار النشر")
+    ) {
+      return false;
+    }
+    return true;
+  };
 
-  const totalToPick = Math.min(18, Math.max(10, Math.floor(paragraphs.length / 3)));
-  const step = Math.max(1, Math.floor(paragraphs.length / Math.max(1, totalToPick)));
+  const chunks = cleanDoc
+    .split(/(?<=[.!?؟\n])\s+/)
+    .map((p) => p.trim().replace(/\s+/g, " "))
+    .filter((p) => isCleanChunk(p));
+
+  const totalToPick = Math.min(18, Math.max(8, chunks.length));
+  const step = Math.max(1, Math.floor(chunks.length / Math.max(1, totalToPick)));
   const fallbackTechniques: ExtractedTechnique[] = [];
 
   let pId = 1;
-  for (let i = 0; i < paragraphs.length && pId <= totalToPick; i += step) {
-    const raw = paragraphs[i];
-    const words = raw.split(/\s+/).slice(0, 6).join(" ");
+  for (let i = 0; i < chunks.length && pId <= totalToPick; i += step) {
+    const raw = chunks[i];
+    const words = raw.split(/\s+/).slice(0, 7).join(" ");
     let title = words
-      .replace(/^(?:إذا|عند|في|على|من|لا|قد|تجنب|احرص|يجب|ينبغي)\s+/, "")
+      .replace(
+        /^(?:إذا|عند|في|على|من|لا|قد|تجنب|احرص|يجب|ينبغي|وقد|أما|فإن|وهو|كما|بل)\s+/,
+        ""
+      )
       .trim();
     if (title.length < 5) title = `المحور التنفيذي #${pId}`;
 
