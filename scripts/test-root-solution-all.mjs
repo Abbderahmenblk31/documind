@@ -179,9 +179,9 @@ async function runComprehensiveTests() {
       forbidden: ['مؤشر أداء رئيسي', 'استخلاص وتوثيق'],
     },
     {
-      name: 'السيرة الذاتية (Abderahmen BELKHIRIA_cv.pdf)',
-      fileName: 'Abderahmen BELKHIRIA_cv.pdf',
-      text: 'Abderahmen BELKHIRIA Opérateur CST Candidat Technicien Process Ingénieur en informatique',
+      name: 'السيرة الذاتية (sample-cv.pdf)',
+      fileName: 'sample-cv.pdf',
+      text: 'Generic Candidate CV
       expectedBook: 'السيرة الذاتية',
       expectedMinTech: 6,
       forbidden: ['دراسة هيكلية معمقة لـ "180', 'مؤشر أداء رئيسي في خطتك التشغيلية', 'استخلاص وتوثيق'],

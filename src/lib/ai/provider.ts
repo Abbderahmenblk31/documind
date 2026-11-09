@@ -56,20 +56,13 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
   // Strip leading list numbers like "1 - ", "01. " while preserving titles like "250 تقنية"
   cleanFileTitle = cleanFileTitle.replace(/^\d{1,2}[\s\-_.:]+\s*(?=[^\d\s]{4,})/, "").trim();
 
-  // If title is only digits (e.g. "180 208") or opaque (e.g. "c1", "doc", "concour"):
+  // If title is only digits (e.g. "180 208") or opaque (e.g. "c1", "doc"):
   if (!cleanFileTitle || /^\d[\d\s]*$/.test(cleanFileTitle) || cleanFileTitle.length < 3) {
-    const rawHead = rawText.slice(0, 1500);
-    if (/abderahmen|belkhiria|curriculum|ingénieur/i.test(rawHead)) {
-      cleanFileTitle = "السيرة الذاتية المهنية (Abderahmen Belkhiria - Ingénieur Informatique)";
-    } else if (/مناظرة|انتداب|المركز الوطني/i.test(rawHead)) {
-      cleanFileTitle = "استمارة ترشح لمناظرة وطنية (المركز الوطني للإعلامية CNI)";
+    const firstLine = rawText.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 5 && !l.includes("http"));
+    if (firstLine) {
+      cleanFileTitle = firstLine.slice(0, 45);
     } else {
-      const firstLine = rawText.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 5 && !l.includes("http"));
-      if (firstLine) {
-        cleanFileTitle = firstLine.slice(0, 45);
-      } else {
-        cleanFileTitle = fileName.replace(/\.[a-zA-Z0-9]+$/i, "");
-      }
+      cleanFileTitle = fileName.replace(/\.[a-zA-Z0-9]+$/i, "");
     }
   }
 
@@ -328,20 +321,6 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       cleanFileTitle.includes("لسان العرب") ||
       headerExcerpt.includes("ابن منظور"));
 
-  const isCvDocument =
-    headerExcerpt.includes("abderahmen") ||
-    headerExcerpt.includes("belkhiria") ||
-    cleanFileTitle.toLowerCase().includes("cv") ||
-    headerExcerpt.includes("curriculum") ||
-    headerExcerpt.includes("opérateur cst");
-
-  const isConcoursDocument =
-    !isCvDocument &&
-    (headerExcerpt.includes("مناظرة") ||
-      headerExcerpt.includes("استمارة ترشح") ||
-      headerExcerpt.includes("المركز الوطني للإعلامية") ||
-      cleanFileTitle.toLowerCase().includes("concour"));
-
   // 5. Synthesize Executive Summary
   let summary = "";
   if (isArabic) {
@@ -396,10 +375,6 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       summary = `يقدم كتاب "الدليل إلى القرآن: سؤال وجواب" مرجعاً منهجياً تفاعلياً لتيسير فهم آيات الكتاب الحكيم عبر صيغة المساءلة والاستكشاف المعرفي. يستعرض العمل مفاتيح السور، وأسباب النزول، والفروق الدلالية بين الألفاظ المتقاربة، مع تفكيك الشبهات وتقديم إجابات رصينة تعين القارئ على ربط التلاوة بالعمل الصالح.`;
     } else if (isLisanBook) {
       summary = `يمثل معجم "لسان العرب" للإمام ابن منظور أعظم موسوعة لغوية ومعجمية في تاريخ الحضارة العربية والإسلامية؛ حيث جمع واستوعب أمهات المعاجم الخمسة الكبرى. يستعرض العمل أصول المفردات وجذورها الاشتقاقية، موثقاً دلالاتها الدقيقة عبر شواهد القرآن الكريم، والحديث النبوي الشريف، وعيون الشعر العربي وأقوال أئمة اللغة.`;
-    } else if (isCvDocument) {
-      summary = `يقدم هذا الملف وثيقة السيرة الذاتية المهنية (Curriculum Vitae) للمهندس عبد الرحمان بلخيرية؛ متضمنةً مؤهلاته الهندسية في الإعلامية وخبرته الميدانية في صناعة وتحضير الكابلات (CST) ومراقبة الجودة الصناعية. يستعرض الملف الكفاءات التقنية، والمسار الأكاديمي، والمهارات المكتسبة في ضبط العمليات الإنتاجية وتحسين الأداء التشغيلي وفق المعايير العالمية.`;
-    } else if (isConcoursDocument) {
-      summary = `تمثل هذه الوثيقة استمارة الترشح الرسمية للمناظرة الخارجية لانتداب مهندسين بعنوان سنتي 2025/2026 بالمركز الوطني للإعلامية (CNI). توثق البيانات الشخصية، والمؤهلات العلمية، وتاريخ التسجيل، مع بيان الشروط والواجبات الإدارية المترتبة على المترشح وفق القوانين المنظمة للمناظرات العمومية.`;
     } else {
       const authorText = authorName ? ` للكاتب (${authorName})` : "";
       summary = `يقدم هذا المستند دراسة هيكلية معمقة لـ "${cleanFileTitle}"${authorText}، مسلطاً الضوء على المحاور والمبادئ الرئيسية الواردة عبر الفصول. يستعرض التحليل الأبعاد الاستراتيجية والتطبيقية للمحتوى، مقدماً رؤية واضحة تستند إلى السياق العام وترابط البيانات لدعم القرارات والتواصل الفعال.`;
@@ -685,10 +660,6 @@ function heuristicAnalyze(rawText: string, fileName: string): AnalysisOutput {
       topics = ["الدليل إلى القرآن", "سؤال وجواب", "علوم القرآن", "فهم التنزيل", "أسباب النزول", "التدبر والتطبيق"];
     } else if (isLisanBook) {
       topics = ["لسان العرب", "ابن منظور", "معاجم اللغة العربية", "فقه اللغة والاشتقاق", "شواهد التنزيل والحديث", "الأدب والشعر"];
-    } else if (isCvDocument) {
-      topics = ["Curriculum Vitae", "Ingénieur Informatique", "Technicien Process", "Opérateur CST", "Contrôle Qualité", "Amélioration Continue"];
-    } else if (isConcoursDocument) {
-      topics = ["مناظرة وطنية", "استمارة ترشح", "المركز الوطني للإعلامية", "انتداب مهندسين", "المعايير الإدارية", "الامتثال القانوني"];
     } else {
       const arStopwords = new Set([
         "في", "من", "إلى", "على", "عن", "مع", "هذا", "هذه", "تم", "كان", "كانت", "أن", "إن", "لا", "ما",
