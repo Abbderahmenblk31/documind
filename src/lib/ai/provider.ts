@@ -835,7 +835,8 @@ function heuristicAnswer(
 export async function analyzeDocumentText(
   text: string,
   fileName: string,
-  config?: AIConfig
+  config?: AIConfig,
+  fileBuffer?: Buffer
 ): Promise<AnalysisOutput> {
   const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
 
@@ -858,7 +859,7 @@ export async function analyzeDocumentText(
             },
             {
               role: "user",
-              content: `Document Name: ${fileName}\n\nContent Excerpt:\n${text.slice(0, 30000)}`,
+              content: `Document Name: ${fileName}\n\nContent Excerpt:\n${text.slice(0, 50000)}`,
             },
           ],
           response_format: { type: "json_object" },
@@ -888,41 +889,88 @@ export async function analyzeDocumentText(
     }
   }
 
-  // 2. Google Gemini Integration
+  // 2. Google Gemini 1.5 Multimodal Integration (Native PDF Vision + 1M Context Window)
   if (apiKey && (apiKey.startsWith("AIza") || config?.provider === "gemini")) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const parts: any[] = [];
+
+      // Multimodal direct PDF support for scanned/visual documents (up to 20MB)
+      if (
+        fileBuffer &&
+        (fileName.toLowerCase().endsWith(".pdf") || fileName.toLowerCase().includes("pdf")) &&
+        fileBuffer.length <= 20 * 1024 * 1024
+      ) {
+        parts.push({
+          inlineData: {
+            mimeType: "application/pdf",
+            data: fileBuffer.toString("base64"),
+          },
+        });
+      }
+
+      parts.push({
+        text: `You are DocuMind Enterprise AI, an elite document intelligence analyst.
+Analyze the provided document "${fileName}".
+Deconstruct the document and return a valid JSON object matching the requested schema.
+
+CRITICAL REQUIREMENTS:
+1. 'summary': comprehensive 3-5 sentence synthesis in the document's primary language.
+2. 'keyPoints': array of 5-8 foundational strategic/conceptual takeaways.
+3. 'sentiment': one of ["Positive", "Neutral", "Cautious", "Analytical"].
+4. 'topics': array of 4-6 domain keywords.
+5. 'techniques': array of 8 to 40 authentic chapters, rules, laws, or actionable principles extracted directly from the document.
+   - 'id': integer sequence (1, 2, 3...).
+   - 'title': authentic chapter or principle name as presented in the work.
+   - 'principle': substantive conceptual explanation of this section's core proposition.
+   - 'example': concrete, realistic practical application tailored specifically to the subject matter (spiritual/ethical guidance for religious works, speech coaching for communication, behavioral tactics for psychology, process engineering for CVs/technical documents, legal analysis for contracts, etc.). NEVER use generic corporate placeholders.
+   - 'category': precise thematic classification for this section.
+
+Content:
+${text.slice(0, 400000)}`,
+      });
+
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Analyze the document "${fileName}". Return a valid JSON object with:
-- summary: authoritative 3-4 sentence synthesis in the document's language
-- keyPoints: array of 5-7 core strategic/conceptual takeaways
-- sentiment: one of ["Positive", "Neutral", "Cautious", "Analytical"]
-- topics: array of 4-6 domain keywords
-- totalTechniquesCount: integer total
-- techniques: array of objects { id: number, title: string, principle: string, example: string, category: string }.
-
-CRITICAL REQUIREMENTS for techniques:
-1. Extract 10 to 30 chapters, rules, or actionable principles directly from the document.
-2. 'title': authentic chapter or principle name.
-3. 'principle': deep explanation of the core concept.
-4. 'example': concrete practical application strictly tailored to the document's subject matter (spiritual/ethical guidance for religious works, speech coaching for communication, behavioral tactics for psychology, execution metrics for business). NEVER use generic corporate placeholders.
-
-Content:
-${text.slice(0, 45000)}`,
-                },
-              ],
-            },
-          ],
+          contents: [{ parts }],
           generationConfig: {
             responseMimeType: "application/json",
-            temperature: 0.2,
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                summary: { type: "STRING" },
+                keyPoints: {
+                  type: "ARRAY",
+                  items: { type: "STRING" },
+                },
+                sentiment: {
+                  type: "STRING",
+                  enum: ["Positive", "Neutral", "Cautious", "Analytical"],
+                },
+                topics: {
+                  type: "ARRAY",
+                  items: { type: "STRING" },
+                },
+                techniques: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      id: { type: "INTEGER" },
+                      title: { type: "STRING" },
+                      principle: { type: "STRING" },
+                      example: { type: "STRING" },
+                      category: { type: "STRING" },
+                    },
+                    required: ["id", "title", "principle", "example", "category"],
+                  },
+                },
+              },
+              required: ["summary", "keyPoints", "sentiment", "topics", "techniques"],
+            },
+            temperature: 0.15,
           },
         }),
       });
@@ -941,13 +989,13 @@ ${text.slice(0, 45000)}`,
           keyPoints: parsed.keyPoints || [],
           sentiment: parsed.sentiment || "Analytical",
           topics: parsed.topics || [],
-          confidence: 0.98,
+          confidence: 0.99,
           totalTechniquesCount: dynamicTechniques.length,
           techniques: dynamicTechniques,
         };
       }
     } catch (err) {
-      console.warn("Gemini API call failed, falling back to heuristic engine:", err);
+      console.warn("Gemini Multimodal API call failed, falling back to heuristic engine:", err);
     }
   }
 

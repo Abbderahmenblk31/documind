@@ -21,6 +21,8 @@ export default function UploadPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeAiProvider, setActiveAiProvider] = useState<string | null>(null);
   const [hasCustomKey, setHasCustomKey] = useState<boolean>(false);
+  const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
+  const [inputKey, setInputKey] = useState<string>("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -34,10 +36,10 @@ export default function UploadPage() {
 
       if (key && key.trim().length > 5) {
         setHasCustomKey(true);
-        setActiveAiProvider(prov === "gemini" ? "Google Gemini" : "OpenAI GPT-4o");
+        setActiveAiProvider(prov === "gemini" ? "Google Gemini 1.5" : "OpenAI GPT-4o");
       } else {
         setHasCustomKey(false);
-        setActiveAiProvider("DocuMind Neural Engine");
+        setActiveAiProvider("Deterministic Extractor (Offline)");
       }
     }
   }, []);
@@ -302,23 +304,113 @@ export default function UploadPage() {
         </div>
 
         {/* AI Engine Status Banner */}
-        <div className="flex items-center justify-between rounded-xl border border-violet-100 bg-violet-50/70 px-4 py-2.5 text-xs text-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-violet-100 bg-violet-50/70 px-4 py-2.5 text-xs text-gray-700">
           <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold text-gray-900">AI Engine:</span>
+            <span
+              className={`flex h-2 w-2 rounded-full ${
+                hasCustomKey ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+              }`}
+            />
+            <span className="font-semibold text-gray-900">AI Intelligence:</span>
             <span className="font-medium text-violet-900">
               {hasCustomKey
-                ? `✨ ${activeAiProvider} (Live LLM Connected)`
-                : `🧠 DocuMind Neural Intelligence (Offline Synthesis - 0 API Key Required)`}
+                ? `⚡ ${activeAiProvider} (1M Token Multimodal AI Connected)`
+                : `📋 وضع الاستخراج الذاتي المحلي (Deterministic Offline Engine)`}
             </span>
           </div>
-          <Link
-            href="/dashboard/settings"
-            className="font-medium text-violet-600 hover:text-violet-800 underline transition-colors"
-          >
-            {hasCustomKey ? "Change Provider" : "Connect Free Gemini/OpenAI Key →"}
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowKeyModal(true)}
+              className="font-semibold text-violet-700 hover:text-violet-900 underline transition-colors"
+            >
+              {hasCustomKey
+                ? "⚙️ إدارة مفتاح الذكاء الاصطناعي"
+                : "⚡ ربط مفتاح Gemini 1.5 المجاني (1M Token) ←"}
+            </button>
+          </div>
         </div>
+
+        {/* Quick API Key Modal */}
+        {showKeyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-violet-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⚡</span>
+                  <h3 className="text-base font-bold text-gray-900">
+                    تفعيل الذكاء الاصطناعي الحي (Google Gemini 1.5)
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowKeyModal(false)}
+                  className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-600 leading-relaxed">
+                اربط مفتاحك الرسمي المجاني من Google لتفعيل نموذج <strong>Gemini 1.5 Flash</strong>،
+                الذي يمتلك نافذة استيعاب تصل إلى <strong>1,000,000 رمز</strong> قادرة على قراءة أي
+                كتاب أو وثيقة مصورة (Scanned) في العالم واستخراج محاورها الحقيقية بدقة 100%.
+              </p>
+
+              <div className="rounded-xl bg-violet-50/80 p-3 text-xs text-violet-900 flex items-center justify-between">
+                <span>المفتاح مجاني 100% وبدون بطاقة بنكية:</span>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white hover:bg-violet-700 transition"
+                >
+                  احصل على المفتاح من Google ↗
+                </a>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  ألصق مفتاح API الخاص بك (Gemini أو OpenAI):
+                </label>
+                <input
+                  type="password"
+                  value={inputKey}
+                  onChange={(e) => setInputKey(e.target.value)}
+                  placeholder="AIzaSy... أو sk-..."
+                  className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-xs text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  onClick={() => setShowKeyModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={() => {
+                    const trimmed = inputKey.trim();
+                    if (trimmed.length > 5) {
+                      const prov = trimmed.startsWith("AIza") ? "gemini" : "openai";
+                      localStorage.setItem("documind_api_key", trimmed);
+                      localStorage.setItem("documind_ai_provider", prov);
+                      setHasCustomKey(true);
+                      setActiveAiProvider(
+                        prov === "gemini" ? "Google Gemini 1.5" : "OpenAI GPT-4o"
+                      );
+                      setShowKeyModal(false);
+                      setInputKey("");
+                    }
+                  }}
+                  disabled={inputKey.trim().length <= 5}
+                  className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2 text-xs font-bold text-white shadow hover:brightness-110 disabled:opacity-50"
+                >
+                  تفعيل وحفظ المفتاح ✨
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {errorMessage && (

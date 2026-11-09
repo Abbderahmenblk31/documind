@@ -30,6 +30,7 @@ export async function POST(request: Request) {
     let pageCount: number | undefined;
     let wordCount = 0;
     let sampleExcerpt = "";
+    let fileBuffer: Buffer | undefined;
 
     // ── CASE 1: Pre-extracted JSON Payload from Browser (Files up to 50MB) ───
     if (contentType.includes("application/json")) {
@@ -73,9 +74,9 @@ export async function POST(request: Request) {
       fileSize = file.size;
 
       const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      fileBuffer = Buffer.from(arrayBuffer);
 
-      const extracted = await extractDocumentContent(buffer, file.name, file.type);
+      const extracted = await extractDocumentContent(fileBuffer, file.name, file.type);
       text = extracted.text;
       fileType = extracted.metadata.fileType;
       pageCount = extracted.metadata.pageCount;
@@ -87,11 +88,16 @@ export async function POST(request: Request) {
       }
     }
 
-    // Run AI analysis (Gemini / OpenAI / Unified Heuristic)
-    const aiResult = await analyzeDocumentText(text, fileName, {
-      apiKey: clientApiKey,
-      provider: clientProvider,
-    });
+    // Run AI analysis (Gemini Multimodal / OpenAI / Unified Heuristic)
+    const aiResult = await analyzeDocumentText(
+      text,
+      fileName,
+      {
+        apiKey: clientApiKey,
+        provider: clientProvider,
+      },
+      fileBuffer
+    );
 
     return NextResponse.json(
       {
